@@ -378,10 +378,10 @@ function renderModalFields(t) {
   } else if (type === 'weather') {
     box.innerHTML = `
       <div class="row">
-        <div class="field"><label>Latitude</label><input id="mLat" type="text" placeholder="37.5530" value="${t.lat || ''}"></div>
-        <div class="field"><label>Longitude</label><input id="mLon" type="text" placeholder="127.2034" value="${t.lon || ''}"></div>
+        <div class="field"><label>Latitude</label><input id="mLat" type="text" placeholder="37.5665" value="${t.lat || ''}"></div>
+        <div class="field"><label>Longitude</label><input id="mLon" type="text" placeholder="126.9780" value="${t.lon || ''}"></div>
       </div>
-      <div class="field"><label>Place name</label><input id="mPlace" type="text" placeholder="Hanam" value="${t.place || ''}"></div>
+      <div class="field"><label>Place name</label><input id="mPlace" type="text" placeholder="Seoul" value="${t.place || ''}"></div>
       <div class="hint">No API key needed (Open-Meteo).</div>
     `;
   }
