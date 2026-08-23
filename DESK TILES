@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desk Tiles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05070d;
+    --panel: #10141f;
+    --bezel: #0c0e14;
+    --screen: #04050a;
+    --border: #1f2635;
+    --text: #e8ecf5;
+    --muted: #6b7385;
+    --up: #35d492;
+    --down: #ff5470;
+    --accent: #f5b942;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', ui-monospace, monospace;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 {
+    font-size: 18px; font-weight: 700; letter-spacing: 1px; margin: 0;
+    color: var(--text);
+  }
+  .controls { display: flex; align-items: center; gap: 14px; }
+  .controls label { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  select, button, input {
+    font-family: inherit; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
+    font-size: 13px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-primary {
+    background: var(--accent); color: #241a03; border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn-primary:hover { color: #241a03; opacity: .9; }
+
+  #grid {
+    display: grid; gap: 20px; padding: 24px;
+  }
+
+  .tile {
+    background: var(--bezel);
+    border-radius: 20px;
+    padding: 12px;
+    position: relative;
+    border: 1px solid #191c26;
+  }
+  .tile .screen {
+    background: var(--screen);
+    border-radius: 10px;
+    aspect-ratio: 1 / 1;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .tile .tools {
+    position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
+    opacity: 0; transition: opacity .15s;
+  }
+  .tile:hover .tools { opacity: 1; }
+  .tile .tools button {
+    padding: 4px 7px; font-size: 11px; border-radius: 5px;
+  }
+
+  .badge { font-size: 11px; color: var(--muted); position: absolute; }
+  .badge.tl { top: 10px; left: 12px; color: var(--accent); }
+  .badge.tr { top: 10px; right: 12px; }
+  .badge.bl { bottom: 8px; left: 12px; }
+
+  .label { font-size: 13px; color: #9ac6ff; text-align: center; margin-top: 18px; letter-spacing: 1px; }
+  .price { font-size: 28px; font-weight: 700; text-align: center; margin-top: 6px; }
+  .change { font-size: 13px; text-align: center; margin-top: 4px; }
+  .change.up { color: var(--up); }
+  .change.down { color: var(--down); }
+  .sub { font-size: 12px; text-align: center; color: var(--muted); margin-top: 2px; }
+  .state-msg { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40%; }
+  .state-msg.err { color: var(--down); }
+
+  svg.spark { position: absolute; left: 8px; right: 8px; bottom: 24px; height: 40%; }
+
+  .empty-tile {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: var(--muted); font-size: 13px; cursor: pointer;
+    border: 1px dashed var(--border); border-radius: 10px;
+  }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; width: 320px; max-width: 90vw;
+  }
+  .modal h2 { font-size: 15px; margin: 0 0 16px; }
+  .modal .field { margin-bottom: 12px; }
+  .modal label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .modal select, .modal input { width: 100%; }
+  .modal .row { display: flex; gap: 10px; }
+  .modal .row > div { flex: 1; }
+  .modal .actions { display: flex; justify-content: space-between; margin-top: 18px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DESK TILES</h1>
+  <div class="controls">
+    <div>
+      <label>Columns</label>
+      <select id="colSelect"></select>
+    </div>
+    <button class="btn-primary" id="addTileBtn">+ Add tile</button>
+  </div>
+</header>
+
+<div id="grid"></div>
+
+<div id="modalRoot"></div>
+
+<script>
+const REFRESH_MS = 60000;
+
+let state = {
+  columns: 3,
+  tiles: [
+    { id: 't1', type: 'binance', symbol: 'INTCUSDT', label: 'INTEL', chart: true },
+    { id: 't2', type: 'binance', symbol: 'BTCUSDT', label: 'BITCOIN', chart: true },
+    { id: 't3', type: 'fx', base: 'USD', quote: 'KRW', label: 'CURRENCY' },
+  ],
+};
+
+let tileData = {};
+let timers = {};
+
+function uid() { return 't' + Math.random().toString(36).slice(2, 9); }
+
+function fmtPrice(v) {
+  if (v == null || isNaN(v)) return '--';
+  if (v >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (v >= 1) return v.toFixed(2);
+  return v.toFixed(4);
+}
+
+function fmtChangeLine(chg, pct) {
+  const arrow = chg >= 0 ? '\u25B2' : '\u25BC';
+  const sign = chg >= 0 ? '+' : '';
+  return `${arrow}${sign}${chg.toFixed(2)} (${sign}${pct.toFixed(2)}%)`;
+}
+
+async function fetchBinance(tile) {
+  const [qRes, kRes] = await Promise.allSettled([
+    fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(tile.symbol)}`),
+    tile.chart ? fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(tile.symbol)}&interval=15m&limit=30`) : Promise.resolve(null),
+  ]);
+  if (qRes.status !== 'fulfilled' || !qRes.value.ok) throw new Error('quote fetch failed');
+  const q = await qRes.value.json();
+  const price = parseFloat(q.lastPrice);
+  const changePct = parseFloat(q.priceChangePercent);
+  const change = parseFloat(q.priceChange);
+  let spark = null;
+  if (tile.chart && kRes.status === 'fulfilled' && kRes.value && kRes.value.ok) {
+    const klines = await kRes.value.json();
+    spark = klines.map(k => parseFloat(k[4]));
+  }
+  return { price, change, changePct, spark, currency: '$' };
+}
+
+async function fetchFx(tile) {
+  const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=${encodeURIComponent(tile.base)}&symbols=${encodeURIComponent(tile.quote)}`);
+  if (!res.ok) throw new Error('fx fetch failed');
+  const j = await res.json();
+  const rate = j.rates[tile.quote];
+  return { price: rate, change: 0, changePct: 0, spark: null, currency: tile.quote + ' ' };
+}
+
+async function fetchWeather(tile) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${tile.lat}&longitude=${tile.lon}&current=temperature_2m,weather_code,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('weather fetch failed');
+  const j = await res.json();
+  return {
+    temp: j.current.temperature_2m,
+    humidity: j.current.relative_humidity_2m,
+    hi: j.daily.temperature_2m_max[0],
+    lo: j.daily.temperature_2m_min[0],
+    code: j.current.weather_code,
+  };
+}
+
+function weatherLabel(code) {
+  if (code === 0) return 'Clear';
+  if (code <= 3) return 'Cloudy';
+  if (code === 45 || code === 48) return 'Fog';
+  if (code >= 51 && code <= 67) return 'Rain';
+  if (code >= 71 && code <= 77) return 'Snow';
+  if (code >= 80 && code <= 82) return 'Rain';
+  if (code >= 95) return 'Storm';
+  return 'Cloudy';
+}
+
+function sparkSvg(values) {
+  if (!values || values.length < 2) return '';
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max - min) || 1;
+  const w = 200, h = 60;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
+}
+
+async function refreshTile(tile) {
+  const el = document.getElementById('screen-' + tile.id);
+  if (!el) return;
+  try {
+    let html = '';
+    if (tile.type === 'binance') {
+      const d = await fetchBinance(tile);
+      const cls = d.change >= 0 ? 'up' : 'down';
+      html = `
+        <div class="label">${tile.label || tile.symbol}</div>
+        <div class="price">${d.currency}${fmtPrice(d.price)}</div>
+        <div class="change ${cls}">${fmtChangeLine(d.change, d.changePct)}</div>
+        ${sparkSvg(d.spark)}
+        <div class="badge bl" style="color: var(--muted)">BINANCE</div>
+      `;
+    } else if (tile.type === 'fx') {
+      const d = await fetchFx(tile);
+      html = `
+        <div class="label">${tile.label || (tile.base + '/' + tile.quote)}</div>
+        <div class="price">${d.currency}${fmtPrice(d.price)}</div>
+        <div class="sub">1 ${tile.base} = ${fmtPrice(d.price)} ${tile.quote}</div>
+        <div class="badge bl" style="color: var(--muted)">FRANKFURTER</div>
+      `;
+    } else if (tile.type === 'weather') {
+      const d = await fetchWeather(tile);
+      html = `
+        <div class="label">${tile.label || tile.place || 'Weather'}</div>
+        <div class="price">${Math.round(d.temp)}\u00B0C</div>
+        <div class="change" style="color: var(--muted)">${weatherLabel(d.code)}</div>
+        <div class="sub">H:${Math.round(d.hi)}\u00B0 L:${Math.round(d.lo)}\u00B0 &middot; ${Math.round(d.humidity)}%</div>
+        <div class="badge bl" style="color: var(--muted)">OPEN-METEO</div>
+      `;
+    }
+    el.innerHTML = html + toolsHtml(tile.id);
+  } catch (e) {
+    el.innerHTML = `
+      <div class="label">${tile.label || tile.symbol || tile.place || ''}</div>
+      <div class="state-msg err">fetch error</div>
+    ` + toolsHtml(tile.id);
+  }
+}
+
+function toolsHtml(id) {
+  return `<div class="tools">
+    <button onclick="editTile('${id}')" aria-label="edit">edit</button>
+    <button onclick="removeTile('${id}')" aria-label="remove">&times;</button>
+  </div>`;
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = `repeat(${state.columns}, minmax(160px, 1fr))`;
+  grid.innerHTML = '';
+  state.tiles.forEach(tile => {
+    const wrap = document.createElement('div');
+    wrap.className = 'tile';
+    wrap.innerHTML = `<div class="screen" id="screen-${tile.id}"><div class="state-msg">loading...</div></div>`;
+    grid.appendChild(wrap);
+  });
+  const addWrap = document.createElement('div');
+  addWrap.className = 'tile';
+  addWrap.innerHTML = `<div class="screen"><div class="empty-tile" onclick="openAddModal()">+ add tile</div></div>`;
+  grid.appendChild(addWrap);
+
+  Object.values(timers).forEach(clearInterval);
+  timers = {};
+  state.tiles.forEach(tile => {
+    refreshTile(tile);
+    timers[tile.id] = setInterval(() => refreshTile(tile), REFRESH_MS);
+  });
+}
+
+function removeTile(id) {
+  state.tiles = state.tiles.filter(t => t.id !== id);
+  if (timers[id]) clearInterval(timers[id]);
+  renderGrid();
+}
+
+function openAddModal() { openTileModal(null); }
+function editTile(id) { openTileModal(state.tiles.find(t => t.id === id)); }
+
+function openTileModal(existing) {
+  const root = document.getElementById('modalRoot');
+  const isEdit = !!existing;
+  const t = existing || { type: 'binance', symbol: '', label: '', chart: true, base: 'USD', quote: 'KRW', lat: '', lon: '', place: '' };
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modalBackdrop">
+      <div class="modal">
+        <h2>${isEdit ? 'Edit tile' : 'Add tile'}</h2>
+        <div class="field">
+          <label>Type</label>
+          <select id="mType">
+            <option value="binance">Stock / crypto (Binance)</option>
+            <option value="fx">Exchange rate</option>
+            <option value="weather">Weather</option>
+          </select>
+        </div>
+        <div id="mFields"></div>
+        <div class="field">
+          <label>Label (optional)</label>
+          <input id="mLabel" type="text" placeholder="INTEL" value="${t.label || ''}">
+        </div>
+        <div class="actions">
+          <button onclick="closeModal()">Cancel</button>
+          <button class="btn-primary" onclick="saveTileModal(${isEdit ? `'${t.id}'` : 'null'})">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('mType').value = t.type;
+  renderModalFields(t);
+  document.getElementById('mType').addEventListener('change', () => renderModalFields({}));
+  document.getElementById('modalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'modalBackdrop') closeModal();
+  });
+}
+
+function renderModalFields(t) {
+  const type = document.getElementById('mType').value;
+  const box = document.getElementById('mFields');
+  if (type === 'binance') {
+    box.innerHTML = `
+      <div class="field">
+        <label>Binance symbol</label>
+        <input id="mSymbol" type="text" placeholder="INTCUSDT" value="${t.symbol || ''}">
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="mChart" style="width:auto" ${t.chart !== false ? 'checked' : ''}> Show chart</label>
+      </div>
+      <div class="hint">No API key needed. Works for crypto (BTCUSDT) and Binance's stock perpetuals (e.g. INTCUSDT). Symbol must match Binance's own listing exactly.</div>
+    `;
+  } else if (type === 'fx') {
+    box.innerHTML = `
+      <div class="row">
+        <div class="field"><label>From</label><input id="mBase" type="text" placeholder="USD" value="${t.base || 'USD'}"></div>
+        <div class="field"><label>To</label><input id="mQuote" type="text" placeholder="KRW" value="${t.quote || 'KRW'}"></div>
+      </div>
+      <div class="hint">No API key needed (Frankfurter). 3-letter currency codes.</div>
+    `;
+  } else if (type === 'weather') {
+    box.innerHTML = `
+      <div class="row">
+        <div class="field"><label>Latitude</label><input id="mLat" type="text" placeholder="37.5530" value="${t.lat || ''}"></div>
+        <div class="field"><label>Longitude</label><input id="mLon" type="text" placeholder="127.2034" value="${t.lon || ''}"></div>
+      </div>
+      <div class="field"><label>Place name</label><input id="mPlace" type="text" placeholder="Hanam" value="${t.place || ''}"></div>
+      <div class="hint">No API key needed (Open-Meteo).</div>
+    `;
+  }
+}
+
+function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+
+function saveTileModal(existingId) {
+  const type = document.getElementById('mType').value;
+  const label = document.getElementById('mLabel').value.trim();
+  let tile = { id: existingId || uid(), type, label };
+
+  if (type === 'binance') {
+    const symbol = document.getElementById('mSymbol').value.trim().toUpperCase();
+    if (!symbol) { alert('Enter a Binance symbol first'); return; }
+    tile.symbol = symbol;
+    tile.chart = document.getElementById('mChart').checked;
+  } else if (type === 'fx') {
+    const base = document.getElementById('mBase').value.trim().toUpperCase();
+    const quote = document.getElementById('mQuote').value.trim().toUpperCase();
+    if (!base || !quote) { alert('Enter both currency codes'); return; }
+    tile.base = base; tile.quote = quote;
+  } else if (type === 'weather') {
+    const lat = parseFloat(document.getElementById('mLat').value);
+    const lon = parseFloat(document.getElementById('mLon').value);
+    if (isNaN(lat) || isNaN(lon)) { alert('Enter latitude and longitude'); return; }
+    tile.lat = lat; tile.lon = lon;
+    tile.place = document.getElementById('mPlace').value.trim();
+  }
+
+  if (existingId) {
+    const idx = state.tiles.findIndex(t => t.id === existingId);
+    state.tiles[idx] = tile;
+  } else {
+    state.tiles.push(tile);
+  }
+  closeModal();
+  renderGrid();
+}
+
+function initColSelect() {
+  const sel = document.getElementById('colSelect');
+  for (let i = 1; i <= 6; i++) {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = i;
+    if (i === state.columns) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    state.columns = parseInt(sel.value, 10);
+    renderGrid();
+  });
+}
+
+document.getElementById('addTileBtn').addEventListener('click', openAddModal);
+initColSelect();
+renderGrid();
+</script>
+</body>
+</html>
