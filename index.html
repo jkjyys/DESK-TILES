@@ -87,6 +87,11 @@
   .btn-export { background: transparent; color: var(--text); border: 1px dashed var(--muted); font-weight: 600; }
   .btn-export:hover { background: var(--panel); color: var(--text); border-color: var(--text); }
 
+  .global-tf { display: flex; gap: 2px; padding: 4px; background: var(--bezel); border: 1px solid var(--border); border-radius: 8px; align-items: center; }
+  .global-tf span { font-size: 11px; font-weight: 700; color: var(--muted); padding: 0 6px 0 8px; letter-spacing: 0.5px; }
+  .global-tf button { background: transparent; border: none; padding: 4px 10px; font-size: 11px; font-weight: 700; color: var(--muted); border-radius: 6px; box-shadow: none; }
+  .global-tf button:hover { color: var(--text); background: var(--panel); }
+
   #grid {
     display: grid; gap: 20px; padding: 24px;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -144,7 +149,7 @@
   
   .ext-label { font-size: 10px; font-weight: 700; color: var(--bg); background: var(--muted); border-radius: 4px; padding: 2px 5px; margin-left: auto; letter-spacing: 0.5px; }
 
-  .source-badge { margin-top: auto; padding-top: 18px; font-size: 11px; font-weight: 700; color: var(--muted); text-shadow: var(--shadow-text); letter-spacing: 0.5px; text-transform: uppercase; z-index: 1;}
+  .source-badge { margin-top: auto; font-size: 11px; font-weight: 700; color: var(--muted); text-shadow: var(--shadow-text); letter-spacing: 0.5px; text-transform: uppercase; z-index: 1;}
 
   .state-msg { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40%; font-weight: 600; }
   .state-msg.err { color: var(--down); }
@@ -153,7 +158,30 @@
   input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; }
 
-  svg.spark { width: 100%; height: 100%; display: block; opacity: 0.35; z-index: 0; }
+  .tf-controls { display: flex; gap: 4px; z-index: 10; }
+  .tf-controls button {
+    background: transparent; border: none; padding: 3px 6px; font-size: 10px; font-weight: 700;
+    color: var(--muted); border-radius: 4px; cursor: pointer; transition: all 0.2s; box-shadow: none;
+  }
+  .tf-controls button:hover { color: var(--text); background: var(--bezel); }
+  .tf-controls button.active { color: var(--bg); background: var(--muted); }
+
+  /* 차트 호버 툴팁(Tooltip) 전용 CSS */
+  .chart-container { position:relative; width:100%; height:100%; cursor:crosshair; }
+  svg.spark { width: 100%; height: 100%; display: block; opacity: 0.4; z-index: 0; }
+  
+  .chart-hover-line {
+    display:none; position:absolute; top:0; bottom:0; width:1px;
+    background: var(--text); opacity: 0.3; pointer-events:none; z-index:5;
+  }
+  .chart-tooltip {
+    display:none; position:absolute; background:var(--bezel); border:1px solid var(--border);
+    padding:6px 10px; border-radius:8px; font-size:11px; color:var(--text); white-space:nowrap;
+    pointer-events:none; z-index:10; box-shadow:0 4px 12px rgba(0,0,0,0.5); top:0;
+    font-weight: 600;
+  }
+  .chart-tooltip .tt-date { color:var(--muted); font-size:10px; margin-bottom:4px; font-weight:700; }
+  .chart-tooltip .tt-price { color:var(--accent); font-size:14px; font-variant-numeric: tabular-nums; }
 
   .empty-tile {
     display: flex; align-items: center; justify-content: center;
@@ -199,6 +227,24 @@
   }
   .combo-item:last-child { border-bottom: none; }
   .combo-item:hover { background: var(--bezel); color: var(--accent); }
+
+  /* 환율 변환기 UI */
+  .tile-converter {
+    display: flex; gap: 8px; align-items: center; margin-top: 16px;
+    background: rgba(120, 123, 134, 0.1); padding: 8px; border-radius: 8px;
+    border: 1px solid var(--border); z-index: 1; position: relative;
+  }
+  .tile-converter-field { position: relative; flex: 1; }
+  .tile-converter-input {
+    width: 100%; background: transparent; border: none; color: var(--text);
+    padding: 4px 38px 4px 4px; font-size: 15px; font-weight: 700;
+    text-align: right; outline: none; font-family: inherit;
+  }
+  .tile-converter-unit {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    font-size: 11px; color: var(--muted); font-weight: 700; pointer-events: none;
+  }
+  .tile-converter-eq { color: var(--muted); font-size: 14px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -206,6 +252,14 @@
 <header>
   <h1>DESK TILES</h1>
   <div class="controls">
+    <div class="global-tf">
+      <span>ALL</span>
+      <button onclick="changeAllTf('1D')">1D</button>
+      <button onclick="changeAllTf('1W')">1W</button>
+      <button onclick="changeAllTf('1M')">1M</button>
+      <button onclick="changeAllTf('1Y')">1Y</button>
+      <button onclick="changeAllTf('5Y')">5Y</button>
+    </div>
     <button id="themeToggleBtn" aria-label="Toggle Theme">☀️</button>
     <button class="btn-export" onclick="exportHTML()" aria-label="Export Dashboard">💾 Save HTML</button>
     <button class="btn-primary" id="addTileBtn">+ Add tile</button>
@@ -214,6 +268,17 @@
 
 <div id="grid"></div>
 <div id="modalRoot"></div>
+
+<!-- 초기 상태 데이터. export 시 이 태그의 내용만 최신 상태로 갈아끼웁니다. -->
+<script type="application/json" id="stateData">
+{
+  "tiles": [
+    { "id": "t1", "type": "binance", "symbol": "INTCUSDT", "label": "INTEL", "chart": true, "tf": "1D" },
+    { "id": "t2", "type": "binance", "symbol": "BTCUSDT", "label": "BITCOIN", "chart": true, "tf": "1D" },
+    { "id": "t3", "type": "fx", "base": "USD", "quote": "KRW", "label": "CURRENCY", "chart": true, "tf": "1D" }
+  ]
+}
+</script>
 
 <!-- 숨겨진 원본 데이터 보관소 -->
 <datalist id="crypto-list"></datalist>
@@ -225,16 +290,16 @@
   <option value="VND">VND - 베트남 Vietnam Dong</option>
   <option value="CNY">CNY - 중국 China Chinese Yuan</option>
   <option value="GBP">GBP - 영국 Britain United Kingdom Pound</option>
-  <option value="AUD">AUD - 호주 Australia Dollar</option>
-  <option value="CAD">CAD - 캐나다 Canada Dollar</option>
-  <option value="CHF">CHF - 스위스 Switzerland Franc</option>
-  <option value="HKD">HKD - 홍콩 Hong Kong Dollar</option>
-  <option value="SGD">SGD - 싱가포르 Singapore Dollar</option>
-  <option value="TWD">TWD - 대만 Taiwan New Dollar</option>
-  <option value="THB">THB - 태국 Thailand Baht</option>
-  <option value="MYR">MYR - 말레이시아 Malaysia Ringgit</option>
-  <option value="IDR">IDR - 인도네시아 Indonesia Rupiah</option>
-  <option value="PHP">PHP - 필리핀 Philippines Peso</option>
+  <option value="AUD">호주 Australia Dollar</option>
+  <option value="CAD">캐나다 Canada Dollar</option>
+  <option value="CHF">스위스 Switzerland Franc</option>
+  <option value="HKD">홍콩 Hong Kong Dollar</option>
+  <option value="SGD">싱가포르 Singapore Dollar</option>
+  <option value="TWD">대만 Taiwan New Dollar</option>
+  <option value="THB">태국 Thailand Baht</option>
+  <option value="MYR">말레이시아 Malaysia Ringgit</option>
+  <option value="IDR">인도네시아 Indonesia Rupiah</option>
+  <option value="PHP">필리핀 Philippines Peso</option>
 </datalist>
 
 <script id="main-script">
@@ -296,70 +361,21 @@ const KNOWN_NAMES = {
   'PEPEUSDT': 'PEPE'
 };
 
-// ====== STATE START ======
-const DEFAULT_STATE = {
-  "tiles": [
-    {
-      "id": "t1",
-      "type": "binance",
-      "symbol": "INTCUSDT",
-      "label": "INTEL",
-      "chart": true,
-      "customLabel": false
-    },
-    {
-      "id": "t2",
-      "type": "binance",
-      "symbol": "TSLAUSDT",
-      "label": "TESLA",
-      "chart": true,
-      "customLabel": false
-    },
-    {
-      "id": "t3",
-      "type": "binance",
-      "symbol": "BTCUSDT",
-      "label": "BITCOIN",
-      "chart": true,
-      "customLabel": false
-    },
-    {
-      "id": "t4",
-      "type": "fx",
-      "base": "USD",
-      "quote": "KRW",
-      "label": "CURRENCY",
-      "chart": true
-    },
-    {
-      "id": "t5",
-      "type": "fx",
-      "base": "JPY",
-      "quote": "KRW",
-      "label": "CURRENCY",
-      "chart": true
-    },
-    {
-      "id": "t6",
-      "type": "binance",
-      "symbol": "ZETAUSDT",
-      "label": "ZETACHAIN",
-      "chart": true,
-      "customLabel": false
-    }
-  ]
-};
-// ====== STATE END ======
+function getDefaultState() {
+  return JSON.parse(document.getElementById('stateData').textContent);
+}
 
 let state;
 try {
   const saved = localStorage.getItem('desk_tiles_state');
-  state = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_STATE));
-} catch(e) { state = JSON.parse(JSON.stringify(DEFAULT_STATE)); }
+  state = saved ? JSON.parse(saved) : getDefaultState();
+} catch(e) { state = getDefaultState(); }
 
 function saveState() { localStorage.setItem('desk_tiles_state', JSON.stringify(state)); }
 
-let timers = {};
+let timers = {};        // tile.id -> interval id (타일이 그대로면 재사용, 불필요한 재조회 방지)
+let tileCache = {};      // tile.id -> 가장 최근 성공한 fetch 결과 (재렌더 시 깜빡임/재조회 방지)
+let chartDataStore = {}; // tile.id -> 차트 원본 데이터 (호버 툴팁용)
 let globalUsdKrw = null;
 let dragSrcEl = null;
 
@@ -378,11 +394,7 @@ function exportHTML() {
   const clone = document.documentElement.cloneNode(true);
   clone.querySelector('#grid').innerHTML = '';
   clone.querySelector('#modalRoot').innerHTML = '';
-
-  let scriptEl = clone.querySelector('#main-script');
-  const regex = /\/\/ ====== STATE START ======\nconst DEFAULT_STATE = [\s\S]*?\n\/\/ ====== STATE END ======/;
-  const newStateString = `// ====== STATE START ======\nconst DEFAULT_STATE = ${JSON.stringify(state, null, 2)};\n// ====== STATE END ======`;
-  scriptEl.innerHTML = scriptEl.innerHTML.replace(regex, newStateString);
+  clone.querySelector('#stateData').textContent = JSON.stringify(state, null, 2);
   clone.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'dark');
 
   const blob = new Blob(['<!DOCTYPE html>\n<html lang="ko">\n' + clone.innerHTML + '\n</html>'], { type: 'text/html;charset=utf-8' });
@@ -435,8 +447,9 @@ function fmtUnifiedChange(change, pct) {
   return `${change >= 0 ? '+' : ''}${pct.toFixed(2)}% (${Math.abs(change).toFixed(2)})`;
 }
 
-function sparkSvg(values) {
-  if (!values || values.length < 2) return '';
+function sparkSvg(chartData, tileId) {
+  if (!chartData || chartData.length < 2) return '';
+  const values = chartData.map(d => d.v);
   const min = Math.min(...values), max = Math.max(...values);
   const range = (max - min) || 1;
   const w = 400, h = 100; 
@@ -449,67 +462,106 @@ function sparkSvg(values) {
   const color = up ? 'var(--up)' : 'var(--down)';
   const gradId = 'grad-' + Math.random().toString(36).slice(2, 9);
 
+  // 차트 원본 데이터는 DOM/속성 문자열이 아니라 tileId를 키로 하는 저장소에 보관합니다.
+  chartDataStore[tileId] = chartData;
+
   return `
-    <svg class='spark' viewBox='0 0 ${w} ${h}' preserveAspectRatio='none'>
-      <defs>
-        <linearGradient id='${gradId}' x1='0' x2='0' y1='0' y2='1'>
-          <stop offset='0%' stop-color='${color}' stop-opacity='0.5'/>
-          <stop offset='100%' stop-color='${color}' stop-opacity='0.0'/>
-        </linearGradient>
-      </defs>
-      <path d='${areaD}' fill='url(#${gradId})' />
-      <path d='${pathD}' fill='none' stroke='${color}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' />
-    </svg>
+    <div class="chart-container" data-tile-id="${tileId}"
+         onmousemove="handleChartHover(event, this)" 
+         onmouseleave="hideChartHover(this)"
+         ontouchstart="handleChartHover(event, this)"
+         ontouchmove="handleChartHover(event, this)"
+         ontouchend="hideChartHover(this)">
+      <svg class='spark' viewBox='0 0 ${w} ${h}' preserveAspectRatio='none'>
+        <defs>
+          <linearGradient id='${gradId}' x1='0' x2='0' y1='0' y2='1'>
+            <stop offset='0%' stop-color='${color}' stop-opacity='0.5'/>
+            <stop offset='100%' stop-color='${color}' stop-opacity='0.0'/>
+          </linearGradient>
+        </defs>
+        <path d='${areaD}' fill='url(#${gradId})' />
+        <path d='${pathD}' fill='none' stroke='${color}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' />
+      </svg>
+      <div class="chart-hover-line"></div>
+      <div class="chart-tooltip"></div>
+    </div>
   `;
 }
 
+function handleChartHover(e, container) {
+  if (e.type === 'touchmove') e.preventDefault(); 
+  const evt = e.touches ? e.touches[0] : e;
+  const rect = container.getBoundingClientRect();
+  const x = evt.clientX - rect.left;
+  const pct = Math.max(0, Math.min(1, x / rect.width));
+  
+  const data = chartDataStore[container.dataset.tileId];
+  if (!data) return;
+  const idx = Math.min(Math.floor(pct * data.length), data.length - 1);
+  const pt = data[idx];
+
+  const line = container.querySelector('.chart-hover-line');
+  const tooltip = container.querySelector('.chart-tooltip');
+
+  line.style.display = 'block';
+  line.style.left = (pct * 100) + '%';
+  tooltip.style.display = 'block';
+  
+  const d = new Date(pt.t);
+  const pad = n => n.toString().padStart(2, '0');
+  const dateStr = `${d.getFullYear().toString().slice(2)}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  
+  tooltip.innerHTML = `<div class="tt-date">${dateStr}</div><div class="tt-price">${fmtPrice(pt.v)}</div>`;
+  
+  const tooltipRect = tooltip.getBoundingClientRect();
+  if (x + tooltipRect.width + 15 > rect.width) {
+    tooltip.style.left = (x - tooltipRect.width - 15) + 'px';
+  } else {
+    tooltip.style.left = (x + 15) + 'px';
+  }
+}
+
+function hideChartHover(container) {
+  container.querySelector('.chart-hover-line').style.display = 'none';
+  container.querySelector('.chart-tooltip').style.display = 'none';
+}
+
+function changeAllTf(tf) {
+  state.tiles.forEach(t => { t.tf = tf; });
+  saveState();
+  state.tiles.forEach(t => refreshTile(t));
+}
+
+function changeTf(id, tf) {
+  const tile = state.tiles.find(t => t.id === id);
+  if (tile) {
+    tile.tf = tf;
+    saveState();
+    refreshTile(tile);
+  }
+}
+
 function buildTileUI(data, tileId) {
-  const { symbolText, titleText, price, change, changePct, high, low, open, prevClose, iconUrl, fallbackChar, sourceBadge, krwStr, baseUnit, baseCode, quoteCode, sparkHtml, showConverter, extLabel } = data;
+  const { symbolText, titleText, price, change, changePct, iconUrl, fallbackChar, sourceBadge, krwStr, baseUnit, baseCode, quoteCode, sparkHtml, showConverter, extLabel, tf, chart } = data;
   
   const cls = change >= 0 ? 'up' : 'down';
   const imgDisplay = iconUrl ? 'block' : 'none';
   const fallbackDisplay = iconUrl ? 'none' : 'flex';
 
-  let rangePct = 50; 
-  if (high > low) {
-    rangePct = ((price - low) / (high - low)) * 100;
-    rangePct = Math.max(0, Math.min(100, rangePct));
-  }
-
-  const rangeHtml = (high !== null && low !== null) ? `
-    <div style="margin-top: 6px; padding-top: 14px; border-top: 1px dashed var(--dashed-line); z-index: 1; position: relative;">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
-        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">L</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(low)}</span></div>
-        <div style="font-size: 12px; color: var(--muted); letter-spacing: 0.5px; font-weight: 600;">DAY'S RANGE</div>
-        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">H</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(high)}</span></div>
-      </div>
-      <div style="height: 6px; background: var(--range-track); border-radius: 3px; position: relative;">
-        <div style="position: absolute; left: 0; top: 0; bottom: 0; width: ${rangePct}%; background: linear-gradient(90deg, var(--down), var(--up)); border-radius: 3px; opacity: 0.9;"></div>
-        <div style="position: absolute; left: ${rangePct}%; top: -3px; width: 4px; height: 12px; background: var(--range-thumb); border-radius: 2px; transform: translateX(-50%); box-shadow: 0 0 4px var(--range-thumb-shadow);"></div>
-      </div>
-      <div style="display: flex; justify-content: space-between; margin-top: 14px;">
-        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">OPEN</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(open)}</span></div>
-        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">PREV</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(prevClose)}</span></div>
-      </div>
-    </div>
-  ` : '';
-
   const converterHtml = showConverter ? `
-    <div style="display: flex; gap: 8px; align-items: center; margin-top: 16px; background: rgba(120, 123, 134, 0.1); padding: 8px; border-radius: 8px; border: 1px solid var(--border); z-index: 1; position: relative;">
-      <div style="position: relative; flex: 1;">
-        <input type="number" id="calc-base-${tileId}" value="${baseUnit}" 
+    <div class="tile-converter">
+      <div class="tile-converter-field">
+        <input type="number" id="calc-base-${tileId}" class="tile-converter-input" value="${baseUnit}"
                onfocus="this.select()" onclick="this.select()"
-               oninput="document.getElementById('calc-quote-${tileId}').value = (this.value * ${(price / baseUnit)}).toFixed(2)" 
-               style="width: 100%; background: transparent; border: none; color: var(--text); padding: 4px 38px 4px 4px; font-size: 15px; font-weight: 700; text-align: right; outline: none; font-family: inherit;">
-        <span style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-weight: 700; pointer-events: none;">${baseCode}</span>
+               oninput="document.getElementById('calc-quote-${tileId}').value = (this.value * ${(price / baseUnit)}).toFixed(2)">
+        <span class="tile-converter-unit">${baseCode}</span>
       </div>
-      <span style="color: var(--muted); font-size: 14px; font-weight: 700;">=</span>
-      <div style="position: relative; flex: 1;">
-        <input type="number" id="calc-quote-${tileId}" value="${price.toFixed(2)}" 
+      <span class="tile-converter-eq">=</span>
+      <div class="tile-converter-field">
+        <input type="number" id="calc-quote-${tileId}" class="tile-converter-input" value="${price.toFixed(2)}"
                onfocus="this.select()" onclick="this.select()"
-               oninput="document.getElementById('calc-base-${tileId}').value = (this.value / ${(price / baseUnit)}).toFixed(2)" 
-               style="width: 100%; background: transparent; border: none; color: var(--text); padding: 4px 38px 4px 4px; font-size: 15px; font-weight: 700; text-align: right; outline: none; font-family: inherit;">
-        <span style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-weight: 700; pointer-events: none;">${quoteCode}</span>
+               oninput="document.getElementById('calc-base-${tileId}').value = (this.value / ${(price / baseUnit)}).toFixed(2)">
+        <span class="tile-converter-unit">${quoteCode}</span>
       </div>
     </div>
   ` : '';
@@ -533,30 +585,48 @@ function buildTileUI(data, tileId) {
     </div>
     ${krwStr ? `<div class="tile-krw" style="font-size: ${showConverter ? '14px' : '16px'}; margin-bottom:0;">${krwStr}</div>` : ''}
     
-    <div style="flex: 1; position: relative; margin: 10px -20px 0 -20px; pointer-events: none;">
+    <div style="flex: 1; position: relative; margin: 10px -20px 0 -20px;">
       ${sparkHtml}
     </div>
     
     <div style="z-index: 2; position: relative;">
-      ${rangeHtml}
       ${converterHtml}
-      <div class="source-badge">${sourceBadge}</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px;">
+        <div class="source-badge" style="margin-top: 0; padding-top: 0;">${sourceBadge}</div>
+        ${chart ? `
+        <div class="tf-controls" onmousedown="event.stopPropagation()">
+          <button class="${tf === '1D' ? 'active' : ''}" onclick="changeTf('${tileId}', '1D')">1D</button>
+          <button class="${tf === '1W' ? 'active' : ''}" onclick="changeTf('${tileId}', '1W')">1W</button>
+          <button class="${tf === '1M' ? 'active' : ''}" onclick="changeTf('${tileId}', '1M')">1M</button>
+          <button class="${tf === '1Y' ? 'active' : ''}" onclick="changeTf('${tileId}', '1Y')">1Y</button>
+          <button class="${tf === '5Y' ? 'active' : ''}" onclick="changeTf('${tileId}', '5Y')">5Y</button>
+        </div>
+        ` : ''}
+      </div>
     </div>
   `;
 }
 
 async function fetchBinance(tile) {
+  let interval = '15m', limit = 96;
+  const tf = tile.tf || '1D';
+  if (tf === '1W') { interval = '2h'; limit = 84; }
+  else if (tf === '1M') { interval = '6h'; limit = 120; }
+  else if (tf === '1Y') { interval = '1d'; limit = 365; }
+  else if (tf === '5Y') { interval = '1w'; limit = 260; } 
+
   const [qRes, kRes] = await Promise.allSettled([
     fetchWithTimeout(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(tile.symbol)}`, 3000),
-    tile.chart ? fetchWithTimeout(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(tile.symbol)}&interval=15m&limit=96`, 3000) : Promise.resolve(null),
+    tile.chart !== false ? fetchWithTimeout(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(tile.symbol)}&interval=${interval}&limit=${limit}`, 3000) : Promise.resolve(null),
   ]);
   if (qRes.status !== 'fulfilled' || !qRes.value.ok) throw new Error('quote fetch failed');
   const q = await qRes.value.json();
   
   let sparkHtml = '';
-  if (tile.chart && kRes.status === 'fulfilled' && kRes.value && kRes.value.ok) {
+  if (tile.chart !== false && kRes.status === 'fulfilled' && kRes.value && kRes.value.ok) {
     const klines = await kRes.value.json();
-    sparkHtml = sparkSvg(klines.map(k => parseFloat(k[4])));
+    const chartData = klines.map(k => ({ t: k[0], v: parseFloat(k[4]) }));
+    sparkHtml = sparkSvg(chartData, tile.id);
   }
 
   const krwPrice = globalUsdKrw ? parseFloat(q.lastPrice) * globalUsdKrw : 0;
@@ -573,43 +643,64 @@ async function fetchBinance(tile) {
     price: parseFloat(q.lastPrice),
     change: parseFloat(q.priceChange),
     changePct: parseFloat(q.priceChangePercent),
-    high: null, low: null, open: null, prevClose: null, 
     iconUrl: iconUrl,
     fallbackChar: baseTicker.charAt(0),
     sourceBadge: 'BINANCE FUTURES',
     krwStr: globalUsdKrw ? `≈ ₩${krwPrice >= 100 ? Math.round(krwPrice).toLocaleString() : krwPrice.toFixed(2)}` : '',
     sparkHtml,
     extLabel: '',
-    showConverter: false
+    showConverter: false,
+    tf: tf,
+    chart: tile.chart !== false
   };
 }
 
 async function fetchFx(tile) {
   const multi = (tile.base === 'JPY' || tile.base === 'VND' || tile.base === 'IDR') ? 100 : 1;
-  const res = await fetchWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(tile.base)}`, 3000);
+
+  let yInt = '30m', yRange = '2d';
+  const tf = tile.tf || '1D';
+  if (tf === '1W') { yInt = '1h'; yRange = '5d'; }
+  else if (tf === '1M') { yInt = '1d'; yRange = '1mo'; }
+  else if (tf === '1Y') { yInt = '1d'; yRange = '1y'; }
+  else if (tf === '5Y') { yInt = '1wk'; yRange = '5y'; }
+
+  // 환율 조회와 차트 조회가 서로 관계없는 요청인데도 이전에는 순서대로(직렬로) 기다렸습니다.
+  // 두 요청을 동시에 시작해서 전체 대기 시간을 줄입니다.
+  const quotePromise = fetchWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(tile.base)}`, 3000);
+
+  let chartPromise = Promise.resolve(null);
+  if (tile.chart !== false) {
+    const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tile.base}${tile.quote}=X?interval=${yInt}&range=${yRange}`;
+    const viaAllOrigins = fetchWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`, 4000)
+      .then(async r => { const j = await r.json(); return JSON.parse(j.contents); });
+    const viaCodetabs = fetchWithTimeout(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 4000)
+      .then(r => r.json());
+    // 두 프록시를 순서대로 시도하는 대신 동시에 요청해서, 먼저 응답하는 쪽을 사용합니다.
+    // (둘 다 실패하면 차트 없이 진행 — 환율 시세 자체는 정상 표시됩니다)
+    chartPromise = Promise.any([viaAllOrigins, viaCodetabs]).catch(() => null);
+  }
+
+  const [res, cData] = await Promise.all([quotePromise, chartPromise]);
   if (!res.ok) throw new Error('fx fetch failed');
   const data = await res.json();
   const price = data.rates[tile.quote] * multi;
 
   let sparkHtml = '';
-  if (tile.chart !== false) {
+  if (cData) {
     try {
-      const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tile.base}${tile.quote}=X?interval=30m&range=2d`;
-      const p1 = `https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`;
-      const p2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`;
-      let cData;
-      try {
-        let r1 = await fetchWithTimeout(p1, 1500);
-        let j1 = await r1.json();
-        cData = JSON.parse(j1.contents);
-      } catch(e) {
-        let r2 = await fetchWithTimeout(p2, 1500);
-        cData = await r2.json();
-      }
+      const timestamps = cData.chart.result[0].timestamp;
       const closes = cData.chart.result[0].indicators.quote[0].close;
-      const validCloses = closes.filter(v => v !== null).map(v => v * multi);
-      if (validCloses.length > 2) sparkHtml = sparkSvg(validCloses);
-    } catch(e) { console.log('fx chart fail (silently ignored)'); }
+      const chartData = [];
+      if (timestamps && closes) {
+        for(let i = 0; i < closes.length; i++) {
+          if(closes[i] !== null) {
+            chartData.push({ t: timestamps[i] * 1000, v: closes[i] * multi });
+          }
+        }
+      }
+      if (chartData.length > 2) sparkHtml = sparkSvg(chartData, tile.id);
+    } catch(e) { console.log('fx chart parse fail (silently ignored)'); }
   }
 
   return {
@@ -618,7 +709,6 @@ async function fetchFx(tile) {
     price: price,
     change: 0,
     changePct: 0,
-    high: null, low: null, open: null, prevClose: null,
     iconUrl: `https://flagcdn.com/w40/${tile.base.substring(0,2).toLowerCase()}.png`,
     fallbackChar: tile.base.charAt(0),
     sourceBadge: 'EXCHANGE-RATE API',
@@ -627,7 +717,9 @@ async function fetchFx(tile) {
     baseUnit: multi,
     baseCode: tile.base,
     quoteCode: tile.quote,
-    sparkHtml
+    sparkHtml,
+    tf: tf,
+    chart: tile.chart !== false
   };
 }
 
@@ -641,6 +733,7 @@ async function refreshTile(tile) {
     if (tile.type === 'binance') data = await fetchBinance(tile);
     else if (tile.type === 'fx') data = await fetchFx(tile);
     
+    tileCache[tile.id] = data;
     el.innerHTML = buildTileUI(data, tile.id);
   } catch (e) {
     el.innerHTML = `
@@ -651,7 +744,6 @@ async function refreshTile(tile) {
   }
 }
 
-// ✨ 드래그 앤 드롭 무중단(No-Reload) 유지 완료
 function handleDragStart(e) { dragSrcEl = this; this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index); }
 function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
 function handleDragEnter(e) { e.preventDefault(); if (this !== dragSrcEl) this.classList.add('drag-over'); }
@@ -663,18 +755,10 @@ function handleDrop(e) {
     const tgtIdx = parseInt(this.dataset.index, 10);
     const draggedItem = state.tiles.splice(srcIdx, 1)[0];
     state.tiles.splice(tgtIdx, 0, draggedItem);
-    saveState(); 
-    
-    const grid = document.getElementById('grid');
-    if (srcIdx < tgtIdx) {
-      grid.insertBefore(dragSrcEl, this.nextSibling);
-    } else {
-      grid.insertBefore(dragSrcEl, this);
-    }
-    
-    Array.from(grid.querySelectorAll('.tile:not(:last-child)')).forEach((el, i) => {
-      el.dataset.index = i;
-    });
+    saveState();
+    // 타일 id가 그대로 유지되므로 renderGrid가 캐시된 데이터로 즉시 다시 그리고,
+    // 진행 중인 타이머도 그대로 재사용해 불필요한 재조회가 일어나지 않습니다.
+    renderGrid();
   }
   return false;
 }
@@ -689,8 +773,9 @@ function renderGrid() {
     wrap.className = 'tile'; wrap.draggable = true; wrap.dataset.index = index;
     wrap.addEventListener('dragstart', handleDragStart); wrap.addEventListener('dragover', handleDragOver); wrap.addEventListener('dragenter', handleDragEnter); wrap.addEventListener('dragleave', handleDragLeave); wrap.addEventListener('drop', handleDrop); wrap.addEventListener('dragend', handleDragEnd);
 
+    const cached = tileCache[tile.id];
     wrap.innerHTML = `
-      <div class='screen' id='screen-${tile.id}'><div class='state-msg'>loading...</div></div>
+      <div class='screen' id='screen-${tile.id}'>${cached ? buildTileUI(cached, tile.id) : "<div class='state-msg'>loading...</div>"}</div>
       <div class='tools' onmousedown="event.stopPropagation()">
         <button onmousedown="editTile('${tile.id}'); event.stopPropagation();" onclick="event.preventDefault();" aria-label='edit'>edit</button>
         <button onmousedown="removeTile('${tile.id}'); event.stopPropagation();" onclick="event.preventDefault();" aria-label='remove'>&times;</button>
@@ -703,14 +788,28 @@ function renderGrid() {
   addWrap.innerHTML = `<div class='screen' style="align-items:center; justify-content:center;"><div class='empty-tile' style="width:100%; border:2px dashed var(--border);" onclick='openAddModal()'>+ add tile</div></div>`;
   grid.appendChild(addWrap);
 
-  Object.values(timers).forEach(clearInterval); timers = {};
+  // 더 이상 존재하지 않는 타일의 타이머/캐시만 정리합니다.
+  const currentIds = new Set(state.tiles.map(t => t.id));
+  Object.keys(timers).forEach(id => {
+    if (!currentIds.has(id)) {
+      clearInterval(timers[id]);
+      delete timers[id];
+      delete tileCache[id];
+      delete chartDataStore[id];
+    }
+  });
+
+  // 이미 타이머가 도는 타일(순서만 바뀐 타일)은 그대로 두고,
+  // 새로 추가되었거나 강제로 리셋된 타일만 즉시 조회 + 타이머 등록합니다.
   state.tiles.forEach(tile => {
-    refreshTile(tile);
-    timers[tile.id] = setInterval(() => refreshTile(tile), getRefreshRate(tile.type));
+    if (!timers[tile.id]) {
+      refreshTile(tile);
+      timers[tile.id] = setInterval(() => refreshTile(tile), getRefreshRate(tile.type));
+    }
   });
 }
 
-function removeTile(id) { state.tiles = state.tiles.filter(t => t.id !== id); if (timers[id]) clearInterval(timers[id]); saveState(); renderGrid(); }
+function removeTile(id) { state.tiles = state.tiles.filter(t => t.id !== id); saveState(); renderGrid(); }
 function openAddModal() { openTileModal(null); }
 function editTile(id) { openTileModal(state.tiles.find(t => t.id === id)); }
 
@@ -800,7 +899,7 @@ function openTileModal(existing) {
   const root = document.getElementById('modalRoot');
   const isEdit = !!existing;
   
-  const t = existing || { type: 'binance', symbol: '', label: '', chart: true, base: 'USD', quote: 'KRW', customLabel: false };
+  const t = existing || { type: 'binance', symbol: '', label: '', chart: true, base: 'USD', quote: 'KRW', customLabel: false, tf: '1D' };
   
   root.innerHTML = `
     <div class='modal-backdrop' id='modalBackdrop'>
@@ -869,45 +968,57 @@ function renderModalFields(t) {
 
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
+// 새 타일 추가 / 기존 타일 수정 시 공통으로 필요한 저장 로직 (기존에는 binance/fx 분기마다 중복돼 있었음)
+function commitTile(tile, existingId) {
+  if (existingId) {
+    const idx = state.tiles.findIndex(t => t.id === existingId);
+    tile.tf = state.tiles[idx].tf || '1D';
+    state.tiles[idx] = tile;
+
+    // 심볼/통화 등 설정이 바뀌었을 수 있으므로, 같은 id로 돌던 타이머와 캐시를 리셋해
+    // renderGrid가 최신 설정으로 즉시 재조회하도록 만듭니다.
+    if (timers[tile.id]) { clearInterval(timers[tile.id]); delete timers[tile.id]; }
+    delete tileCache[tile.id];
+    delete chartDataStore[tile.id];
+  } else {
+    tile.tf = '1D';
+    state.tiles.push(tile);
+  }
+  saveState();
+  closeModal();
+  renderGrid();
+}
+
 async function saveTileModal(existingId) {
   const type = document.getElementById('mType').value;
   let tile = { id: existingId || uid(), type };
 
   if (type === 'binance') {
     const baseSymbol = document.getElementById('mSymbol').value.trim().toUpperCase();
-    if (!baseSymbol) { alert('Enter a symbol first'); return; }
+    if (!baseSymbol) { alert('심볼을 먼저 입력해주세요'); return; }
     
     let customLabel = document.getElementById('mLabel').value.trim();
     tile.symbol = baseSymbol.endsWith('USDT') ? baseSymbol : baseSymbol + 'USDT';
     tile.customLabel = customLabel !== '';
-    
-    if (!customLabel && KNOWN_NAMES[tile.symbol]) tile.label = KNOWN_NAMES[tile.symbol];
-    else tile.label = customLabel || baseSymbol;
-    
+    tile.label = (!customLabel && KNOWN_NAMES[tile.symbol]) ? KNOWN_NAMES[tile.symbol] : (customLabel || baseSymbol);
     tile.chart = document.getElementById('mChart').checked;
 
-    if (existingId) state.tiles[state.tiles.findIndex(t => t.id === existingId)] = tile;
-    else state.tiles.push(tile);
-    
-    saveState(); closeModal(); renderGrid();
+    commitTile(tile, existingId);
   } else if (type === 'fx') {
-    let base = document.getElementById('mBase').value.trim().toUpperCase();
-    let quote = document.getElementById('mQuote').value.trim().toUpperCase();
-    base = base.substring(0, 3); quote = quote.substring(0, 3);
-    if (!base || !quote) { alert('Enter both currency codes'); return; }
+    let base = document.getElementById('mBase').value.trim().toUpperCase().substring(0, 3);
+    let quote = document.getElementById('mQuote').value.trim().toUpperCase().substring(0, 3);
+    if (!base || !quote) { alert('통화 코드를 모두 입력해주세요'); return; }
     
-    tile.base = base; tile.quote = quote; tile.label = document.getElementById('mLabel').value.trim();
+    tile.base = base; tile.quote = quote;
+    tile.label = document.getElementById('mLabel').value.trim();
     tile.chart = document.getElementById('mChart').checked;
-    
-    if (existingId) state.tiles[state.tiles.findIndex(t => t.id === existingId)] = tile;
-    else state.tiles.push(tile);
-    
-    saveState(); closeModal(); renderGrid();
+
+    commitTile(tile, existingId);
   }
 }
 
-delayRender = () => { document.getElementById('addTileBtn').addEventListener('click', openAddModal); renderGrid(); }
-delayRender();
+document.getElementById('addTileBtn').addEventListener('click', openAddModal);
+renderGrid();
 </script>
 </body>
 </html>
