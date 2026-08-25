@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- 모바일 터치 드래그 앤 드롭 지원 라이브러리 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.css">
 <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
 
@@ -108,8 +109,8 @@
   .tile .screen {
     background: var(--screen); border-radius: 10px; 
     padding: 20px; display: flex; flex-direction: column;
-    position: relative; overflow: visible; transition: background 0.3s ease;
-    flex: 1; 
+    position: relative; overflow: hidden; transition: background 0.3s ease;
+    height: 330px; 
   }
   .tile .tools {
     position: absolute; top: 16px; right: 16px; display: flex; gap: 6px;
@@ -152,7 +153,7 @@
   input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; }
 
-  svg.spark { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 45%; z-index: 0; opacity: 0.5; pointer-events: none; }
+  svg.spark { width: 100%; height: 100%; display: block; opacity: 0.35; z-index: 0; }
 
   .empty-tile {
     display: flex; align-items: center; justify-content: center;
@@ -240,7 +241,6 @@
 MobileDragDrop.polyfill({ holdToDrag: 250 });
 window.addEventListener('touchmove', function() {}, {passive: false});
 
-// 🌟 무한 로딩 방지용 Timeout 래퍼 함수
 function fetchWithTimeout(url, ms = 3000) {
   return Promise.race([
     fetch(url),
@@ -257,8 +257,17 @@ const DOMAIN_MAP = {
   'MSFT': 'microsoft.com',
   'NVDA': 'nvidia.com',
   'GOOGL': 'abc.xyz',
+  'GOOG': 'abc.xyz',
+  'META': 'meta.com',
+  'AMD': 'amd.com',
+  'NFLX': 'netflix.com',
   'COIN': 'coinbase.com',
-  'HOOD': 'robinhood.com'
+  'HOOD': 'robinhood.com',
+  'ZETA': 'zetachain.com',
+  'SUI': 'sui.io',
+  'APT': 'aptosfoundation.org',
+  'ARB': 'arbitrum.foundation',
+  'PEPE': 'pepe.vip'
 };
 
 const KNOWN_NAMES = {
@@ -267,9 +276,24 @@ const KNOWN_NAMES = {
   'AMZNUSDT': 'AMAZON',
   'MSTRUSDT': 'MICROSTRATEGY',
   'HOODUSDT': 'ROBINHOOD',
+  'AAPLUSDT': 'APPLE',
+  'MSFTUSDT': 'MICROSOFT',
+  'NVDAUSDT': 'NVIDIA',
+  'GOOGLUSDT': 'ALPHABET',
+  'METAUSDT': 'META',
+  'AMDUSDT': 'AMD',
+  'NFLXUSDT': 'NETFLIX',
+  'COINUSDT': 'COINBASE',
   'BTCUSDT': 'BITCOIN',
   'ETHUSDT': 'ETHEREUM',
-  'SOLUSDT': 'SOLANA'
+  'SOLUSDT': 'SOLANA',
+  'XRPUSDT': 'RIPPLE',
+  'DOGEUSDT': 'DOGECOIN',
+  'ZETAUSDT': 'ZETACHAIN',
+  'SUIUSDT': 'SUI',
+  'APTUSDT': 'APTOS',
+  'ARBUSDT': 'ARBITRUM',
+  'PEPEUSDT': 'PEPE'
 };
 
 // ====== STATE START ======
@@ -304,14 +328,24 @@ const DEFAULT_STATE = {
       "type": "fx",
       "base": "USD",
       "quote": "KRW",
-      "label": "CURRENCY"
+      "label": "CURRENCY",
+      "chart": true
     },
     {
       "id": "t5",
       "type": "fx",
       "base": "JPY",
       "quote": "KRW",
-      "label": "CURRENCY"
+      "label": "CURRENCY",
+      "chart": true
+    },
+    {
+      "id": "t6",
+      "type": "binance",
+      "symbol": "ZETAUSDT",
+      "label": "ZETACHAIN",
+      "chart": true,
+      "customLabel": false
     }
   ]
 };
@@ -443,7 +477,7 @@ function buildTileUI(data, tileId) {
   }
 
   const rangeHtml = (high !== null && low !== null) ? `
-    <div style="margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--dashed-line); z-index: 1; position: relative;">
+    <div style="margin-top: 6px; padding-top: 14px; border-top: 1px dashed var(--dashed-line); z-index: 1; position: relative;">
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
         <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">L</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(low)}</span></div>
         <div style="font-size: 12px; color: var(--muted); letter-spacing: 0.5px; font-weight: 600;">DAY'S RANGE</div>
@@ -491,17 +525,23 @@ function buildTileUI(data, tileId) {
         <div class="tile-label">${titleText}</div>
       </div>
     </div>
+    
     <div class="tile-price-row">
       <div class="tile-price ${change !== 0 ? cls : ''}" ${change === 0 && !showConverter ? 'style="color: var(--text);"' : ''}>${fmtPrice(price)}</div>
       <div class="tile-change ${cls}">${change !== 0 ? fmtUnifiedChange(change, changePct) : ''}</div>
       ${extTag}
     </div>
-    ${krwStr ? `<div class="tile-krw" style="font-size: ${showConverter ? '14px' : '16px'};">${krwStr}</div>` : ''}
-    ${showConverter ? `<div class="tile-krw" style="font-size: 14px; display: none;">${baseUnit} ${baseCode} = ${fmtPrice(price)} ${quoteCode}</div>` : ''}
-    ${rangeHtml}
-    ${converterHtml}
-    ${sparkHtml || ''}
-    <div class="source-badge">${sourceBadge}</div>
+    ${krwStr ? `<div class="tile-krw" style="font-size: ${showConverter ? '14px' : '16px'}; margin-bottom:0;">${krwStr}</div>` : ''}
+    
+    <div style="flex: 1; position: relative; margin: 10px -20px 0 -20px; pointer-events: none;">
+      ${sparkHtml}
+    </div>
+    
+    <div style="z-index: 2; position: relative;">
+      ${rangeHtml}
+      ${converterHtml}
+      <div class="source-badge">${sourceBadge}</div>
+    </div>
   `;
 }
 
@@ -524,7 +564,7 @@ async function fetchBinance(tile) {
   
   let iconUrl = `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/32/icon/${baseTicker.toLowerCase()}.png`;
   if (DOMAIN_MAP[baseTicker]) {
-    iconUrl = `https://logo.clearbit.com/${DOMAIN_MAP[baseTicker]}`;
+    iconUrl = `https://www.google.com/s2/favicons?domain=${DOMAIN_MAP[baseTicker]}&sz=128`;
   }
 
   return {
@@ -559,7 +599,6 @@ async function fetchFx(tile) {
       const p2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`;
       let cData;
       try {
-        // ✨ 여기서 1.5초만에 응답 안 오면 차트 쿨하게 포기하고 넘어갑니다
         let r1 = await fetchWithTimeout(p1, 1500);
         let j1 = await r1.json();
         cData = JSON.parse(j1.contents);
@@ -579,7 +618,7 @@ async function fetchFx(tile) {
     price: price,
     change: 0,
     changePct: 0,
-    high: price, low: price, open: price, prevClose: price,
+    high: null, low: null, open: null, prevClose: null,
     iconUrl: `https://flagcdn.com/w40/${tile.base.substring(0,2).toLowerCase()}.png`,
     fallbackChar: tile.base.charAt(0),
     sourceBadge: 'EXCHANGE-RATE API',
@@ -606,12 +645,13 @@ async function refreshTile(tile) {
   } catch (e) {
     el.innerHTML = `
       <div class='label' style="font-weight: 700; color: var(--text);">${tile.label || tile.symbol}</div>
-      <div class='state-msg err' style="margin-top:30%; line-height: 1.5;"><span style="color:var(--down);">fetch error</span></div>
+      <div class='state-msg err' style="margin-top:30%; line-height: 1.5;"><span style="color:var(--down);">fetch error</span><br><span style="font-size:10px; color:var(--muted);">Check network</span></div>
       <div class="source-badge">WAITING...</div>
     `;
   }
 }
 
+// ✨ 드래그 앤 드롭 무중단(No-Reload) 유지 완료
 function handleDragStart(e) { dragSrcEl = this; this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index); }
 function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
 function handleDragEnter(e) { e.preventDefault(); if (this !== dragSrcEl) this.classList.add('drag-over'); }
@@ -623,7 +663,18 @@ function handleDrop(e) {
     const tgtIdx = parseInt(this.dataset.index, 10);
     const draggedItem = state.tiles.splice(srcIdx, 1)[0];
     state.tiles.splice(tgtIdx, 0, draggedItem);
-    saveState(); renderGrid();
+    saveState(); 
+    
+    const grid = document.getElementById('grid');
+    if (srcIdx < tgtIdx) {
+      grid.insertBefore(dragSrcEl, this.nextSibling);
+    } else {
+      grid.insertBefore(dragSrcEl, this);
+    }
+    
+    Array.from(grid.querySelectorAll('.tile:not(:last-child)')).forEach((el, i) => {
+      el.dataset.index = i;
+    });
   }
   return false;
 }
@@ -699,8 +750,7 @@ function makeComboBox(inputId, listId) {
         const div = document.createElement('div');
         div.className = 'combo-item';
         div.textContent = o.text;
-        div.onmousedown = (e) => {
-          e.preventDefault(); 
+        div.onclick = (e) => {
           input.value = o.val;
           listDiv.classList.remove('show');
           input.dispatchEvent(new Event('input'));
@@ -731,7 +781,9 @@ function makeComboBox(inputId, listId) {
   });
 
   input.addEventListener('blur', () => {
-    listDiv.classList.remove('show');
+    setTimeout(() => {
+        listDiv.classList.remove('show');
+    }, 200); 
   });
 
   arrow.addEventListener('mousedown', (e) => {
@@ -747,7 +799,8 @@ function makeComboBox(inputId, listId) {
 function openTileModal(existing) {
   const root = document.getElementById('modalRoot');
   const isEdit = !!existing;
-  const t = existing || { type: 'binance', symbol: 'TSLAUSDT', label: 'TESLA', chart: true, base: 'USD', quote: 'KRW', customLabel: false };
+  
+  const t = existing || { type: 'binance', symbol: '', label: '', chart: true, base: 'USD', quote: 'KRW', customLabel: false };
   
   root.innerHTML = `
     <div class='modal-backdrop' id='modalBackdrop'>
