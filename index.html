@@ -6,7 +6,10 @@
 <title>Desk Tiles</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.css">
+<script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
+
 <style>
   :root {
     --bg: #05070d;
@@ -14,19 +17,48 @@
     --bezel: #0c0e14;
     --screen: #04050a;
     --border: #1f2635;
-    --text: #e8ecf5;
-    --muted: #6b7385;
-    --up: #35d492;
-    --down: #ff5470;
+    --text: #d1d4dc;
+    --muted: #787b86;
+    --up: #089981;
+    --down: #f23645;
     --accent: #f5b942;
+    --btn-text: #241a03;
+    --krw-text: #b0b5c9;
+    --dashed-line: rgba(255,255,255,0.08);
+    --range-track: rgba(255,255,255,0.1);
+    --range-thumb: #ffffff;
+    --range-thumb-shadow: rgba(0,0,0,0.8);
+    --shadow-text: 0 1px 3px var(--bg);
+    --shadow-price: 0 2px 8px var(--bg), 0 0 12px var(--bg);
   }
+
+  [data-theme="light"] {
+    --bg: #f0f2f5;
+    --panel: #ffffff;
+    --bezel: #ffffff;
+    --screen: #f8f9fa;
+    --border: #d1d4dc;
+    --text: #131722;
+    --muted: #787b86;
+    --accent: #2962ff;
+    --btn-text: #ffffff;
+    --krw-text: #787b86;
+    --dashed-line: rgba(0,0,0,0.1);
+    --range-track: rgba(0,0,0,0.1);
+    --range-thumb: #131722;
+    --range-thumb-shadow: rgba(255,255,255,0.8);
+    --shadow-text: none;
+    --shadow-price: none;
+  }
+
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: 'Space Mono', ui-monospace, monospace;
+    font-family: 'Inter', 'Malgun Gothic', '맑은 고딕', sans-serif;
     min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
   }
   header {
     display: flex; align-items: center; justify-content: space-between;
@@ -37,71 +69,95 @@
     font-size: 18px; font-weight: 700; letter-spacing: 1px; margin: 0;
     color: var(--text);
   }
-  .controls { display: flex; align-items: center; gap: 14px; }
-  .controls label { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   select, button, input {
     font-family: inherit; background: var(--panel); color: var(--text);
     border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
-    font-size: 13px;
+    font-size: 13px; outline: none;
   }
-  button { cursor: pointer; }
+  button { cursor: pointer; transition: all 0.2s ease; }
   button:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-primary {
-    background: var(--accent); color: #241a03; border-color: var(--accent);
-    font-weight: 700;
-  }
-  .btn-primary:hover { color: #241a03; opacity: .9; }
+  
+  #themeToggleBtn { font-size: 14px; padding: 6px 10px; display: flex; align-items: center; justify-content: center; }
+
+  .btn-primary { background: var(--accent); color: var(--btn-text); border-color: var(--accent); font-weight: 700; }
+  .btn-primary:hover { color: var(--btn-text); opacity: .9; }
+  
+  .btn-export { background: transparent; color: var(--text); border: 1px dashed var(--muted); font-weight: 600; }
+  .btn-export:hover { background: var(--panel); color: var(--text); border-color: var(--text); }
 
   #grid {
     display: grid; gap: 20px; padding: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    align-items: stretch;
   }
 
   .tile {
-    background: var(--bezel);
-    border-radius: 20px;
-    padding: 12px;
-    position: relative;
-    border: 1px solid #191c26;
+    background: var(--bezel); border-radius: 20px; padding: 12px;
+    position: relative; border: 1px solid var(--border);
+    transition: transform 0.2s, border-color 0.2s, background 0.3s ease;
+    touch-action: pan-y;
+    display: flex; flex-direction: column;
   }
+  
+  .tile[draggable="true"] { cursor: grab; }
+  .tile[draggable="true"]:active { cursor: grabbing; }
+  .tile.dragging { opacity: 0.5; transform: scale(0.95); z-index: 20; }
+  .tile.drag-over { border-color: var(--accent); transform: scale(1.02); }
+
   .tile .screen {
-    background: var(--screen);
-    border-radius: 10px;
-    aspect-ratio: 1 / 1;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
+    background: var(--screen); border-radius: 10px; 
+    padding: 20px; display: flex; flex-direction: column;
+    position: relative; overflow: visible; transition: background 0.3s ease;
+    flex: 1; 
   }
   .tile .tools {
-    position: absolute; top: 6px; right: 6px; display: flex; gap: 4px;
-    opacity: 0; transition: opacity .15s;
+    position: absolute; top: 16px; right: 16px; display: flex; gap: 6px;
+    opacity: 0.8; transition: opacity .15s; z-index: 20;
   }
   .tile:hover .tools { opacity: 1; }
   .tile .tools button {
-    padding: 4px 7px; font-size: 11px; border-radius: 5px;
+    padding: 5px 8px; font-size: 11px; border-radius: 6px; font-weight: 600;
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   }
+  .tile .tools button:hover { background: var(--panel); color: var(--accent); }
 
-  .badge { font-size: 11px; color: var(--muted); position: absolute; }
-  .badge.tl { top: 10px; left: 12px; color: var(--accent); }
-  .badge.tr { top: 10px; right: 12px; }
-  .badge.bl { bottom: 8px; left: 12px; }
+  .tile-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; z-index: 1; position: relative; }
+  .tile-icon { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: white; border: 1px solid var(--border); }
+  .tile-icon-fallback { width: 28px; height: 28px; border-radius: 50%; background: var(--border); display: none; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; color: var(--text); }
+  .tile-title { display: flex; flex-direction: column; text-align: left; }
+  .tile-symbol { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: 0.5px; text-shadow: var(--shadow-text); }
+  .tile-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; text-shadow: var(--shadow-text); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 
-  .label { font-size: 13px; color: #9ac6ff; text-align: center; margin-top: 18px; letter-spacing: 1px; }
-  .price { font-size: 28px; font-weight: 700; text-align: center; margin-top: 6px; }
-  .change { font-size: 13px; text-align: center; margin-top: 4px; }
-  .change.up { color: var(--up); }
-  .change.down { color: var(--down); }
-  .sub { font-size: 12px; text-align: center; color: var(--muted); margin-top: 2px; }
-  .state-msg { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40%; }
+  .tile-price-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; z-index: 1; position: relative; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+  .tile-price { font-size: 30px; font-weight: 700; text-shadow: var(--shadow-price); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .tile-price.up { color: var(--up); }
+  .tile-price.down { color: var(--down); }
+  
+  .tile-change { font-size: 15px; font-weight: 700; text-shadow: var(--shadow-text); font-variant-numeric: tabular-nums; }
+  .tile-change.up { color: var(--up); }
+  .tile-change.down { color: var(--down); }
+
+  .tile-krw { font-size: 16px; color: var(--krw-text); z-index: 1; position: relative; font-weight: 700; text-shadow: var(--shadow-text); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  
+  .ext-label { font-size: 10px; font-weight: 700; color: var(--bg); background: var(--muted); border-radius: 4px; padding: 2px 5px; margin-left: auto; letter-spacing: 0.5px; }
+
+  .source-badge { margin-top: auto; padding-top: 18px; font-size: 11px; font-weight: 700; color: var(--muted); text-shadow: var(--shadow-text); letter-spacing: 0.5px; text-transform: uppercase; z-index: 1;}
+
+  .state-msg { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40%; font-weight: 600; }
   .state-msg.err { color: var(--down); }
 
-  svg.spark { position: absolute; left: 8px; right: 8px; bottom: 24px; height: 40%; }
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; }
+
+  svg.spark { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 45%; z-index: 0; opacity: 0.5; pointer-events: none; }
 
   .empty-tile {
     display: flex; align-items: center; justify-content: center;
-    height: 100%; color: var(--muted); font-size: 13px; cursor: pointer;
-    border: 1px dashed var(--border); border-radius: 10px;
+    height: 100%; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px dashed var(--border); border-radius: 10px; min-height: 250px;
   }
 
   .modal-backdrop {
@@ -110,17 +166,38 @@
   }
   .modal {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 22px; width: 320px; max-width: 90vw;
+    padding: 22px; width: 320px; max-width: 90vw; position: relative;
   }
-  .modal h2 { font-size: 15px; margin: 0 0 16px; }
+  .modal h2 { font-size: 16px; font-weight: 700; margin: 0 0 16px; }
   .modal .field { margin-bottom: 12px; }
-  .modal label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .modal select, .modal input { width: 100%; }
+  .modal label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .modal select, .modal input { width: 100%; font-weight: 600; }
   .modal .row { display: flex; gap: 10px; }
   .modal .row > div { flex: 1; }
   .modal .actions { display: flex; justify-content: space-between; margin-top: 18px; }
   .hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
-  .hidden { display: none !important; }
+
+  /* 콤보박스 CSS */
+  .combo-box { position: relative; width: 100%; }
+  .combo-arrow { 
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%); 
+    cursor: pointer; color: var(--muted); font-size: 10px; padding: 5px; 
+  }
+  .combo-list { 
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; 
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; 
+    max-height: 180px; overflow-y: auto; z-index: 9999; display: none; 
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6); 
+  }
+  .combo-list.show { display: block; }
+  .combo-list::-webkit-scrollbar { width: 6px; }
+  .combo-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .combo-item { 
+    padding: 8px 12px; cursor: pointer; color: var(--text); font-size: 12px; 
+    border-bottom: 1px solid var(--bezel); font-weight: 600; 
+  }
+  .combo-item:last-child { border-bottom: none; }
+  .combo-item:hover { background: var(--bezel); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -128,317 +205,656 @@
 <header>
   <h1>DESK TILES</h1>
   <div class="controls">
-    <div>
-      <label>Columns</label>
-      <select id="colSelect"></select>
-    </div>
+    <button id="themeToggleBtn" aria-label="Toggle Theme">☀️</button>
+    <button class="btn-export" onclick="exportHTML()" aria-label="Export Dashboard">💾 Save HTML</button>
     <button class="btn-primary" id="addTileBtn">+ Add tile</button>
   </div>
 </header>
 
 <div id="grid"></div>
-
 <div id="modalRoot"></div>
 
-<script>
-const REFRESH_MS = 1000;
+<!-- 숨겨진 원본 데이터 보관소 -->
+<datalist id="crypto-list"></datalist>
+<datalist id="fx-list">
+  <option value="USD">USD - 미국 America US Dollar</option>
+  <option value="KRW">KRW - 한국 Korea South Korean Won</option>
+  <option value="JPY">JPY - 일본 Japan Japanese Yen</option>
+  <option value="EUR">EUR - 유럽 Europe Euro</option>
+  <option value="VND">VND - 베트남 Vietnam Dong</option>
+  <option value="CNY">CNY - 중국 China Chinese Yuan</option>
+  <option value="GBP">GBP - 영국 Britain United Kingdom Pound</option>
+  <option value="AUD">AUD - 호주 Australia Dollar</option>
+  <option value="CAD">CAD - 캐나다 Canada Dollar</option>
+  <option value="CHF">CHF - 스위스 Switzerland Franc</option>
+  <option value="HKD">HKD - 홍콩 Hong Kong Dollar</option>
+  <option value="SGD">SGD - 싱가포르 Singapore Dollar</option>
+  <option value="TWD">TWD - 대만 Taiwan New Dollar</option>
+  <option value="THB">THB - 태국 Thailand Baht</option>
+  <option value="MYR">MYR - 말레이시아 Malaysia Ringgit</option>
+  <option value="IDR">IDR - 인도네시아 Indonesia Rupiah</option>
+  <option value="PHP">PHP - 필리핀 Philippines Peso</option>
+</datalist>
 
-let state = {
-  columns: 3,
-  tiles: [
-    { id: 't1', type: 'binance', symbol: 'INTCUSDT', label: 'INTEL', chart: true },
-    { id: 't2', type: 'binance', symbol: 'BTCUSDT', label: 'BITCOIN', chart: true },
-    { id: 't3', type: 'fx', base: 'USD', quote: 'KRW', label: 'CURRENCY' },
-  ],
+<script id="main-script">
+MobileDragDrop.polyfill({ holdToDrag: 250 });
+window.addEventListener('touchmove', function() {}, {passive: false});
+
+// 🌟 무한 로딩 방지용 Timeout 래퍼 함수
+function fetchWithTimeout(url, ms = 3000) {
+  return Promise.race([
+    fetch(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+  ]);
+}
+
+const DOMAIN_MAP = {
+  'INTC': 'intel.com',
+  'TSLA': 'tesla.com',
+  'AMZN': 'amazon.com',
+  'MSTR': 'microstrategy.com',
+  'AAPL': 'apple.com',
+  'MSFT': 'microsoft.com',
+  'NVDA': 'nvidia.com',
+  'GOOGL': 'abc.xyz',
+  'COIN': 'coinbase.com',
+  'HOOD': 'robinhood.com'
 };
 
-let tileData = {};
+const KNOWN_NAMES = {
+  'TSLAUSDT': 'TESLA',
+  'INTCUSDT': 'INTEL',
+  'AMZNUSDT': 'AMAZON',
+  'MSTRUSDT': 'MICROSTRATEGY',
+  'HOODUSDT': 'ROBINHOOD',
+  'BTCUSDT': 'BITCOIN',
+  'ETHUSDT': 'ETHEREUM',
+  'SOLUSDT': 'SOLANA'
+};
+
+// ====== STATE START ======
+const DEFAULT_STATE = {
+  "tiles": [
+    {
+      "id": "t1",
+      "type": "binance",
+      "symbol": "INTCUSDT",
+      "label": "INTEL",
+      "chart": true,
+      "customLabel": false
+    },
+    {
+      "id": "t2",
+      "type": "binance",
+      "symbol": "TSLAUSDT",
+      "label": "TESLA",
+      "chart": true,
+      "customLabel": false
+    },
+    {
+      "id": "t3",
+      "type": "binance",
+      "symbol": "BTCUSDT",
+      "label": "BITCOIN",
+      "chart": true,
+      "customLabel": false
+    },
+    {
+      "id": "t4",
+      "type": "fx",
+      "base": "USD",
+      "quote": "KRW",
+      "label": "CURRENCY"
+    },
+    {
+      "id": "t5",
+      "type": "fx",
+      "base": "JPY",
+      "quote": "KRW",
+      "label": "CURRENCY"
+    }
+  ]
+};
+// ====== STATE END ======
+
+let state;
+try {
+  const saved = localStorage.getItem('desk_tiles_state');
+  state = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_STATE));
+} catch(e) { state = JSON.parse(JSON.stringify(DEFAULT_STATE)); }
+
+function saveState() { localStorage.setItem('desk_tiles_state', JSON.stringify(state)); }
+
 let timers = {};
+let globalUsdKrw = null;
+let dragSrcEl = null;
+
+const themeBtn = document.getElementById('themeToggleBtn');
+const root = document.documentElement;
+
+function setTheme(theme) {
+  root.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  themeBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+setTheme(localStorage.getItem('theme') || 'dark');
+themeBtn.addEventListener('click', () => { setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); });
+
+function exportHTML() {
+  const clone = document.documentElement.cloneNode(true);
+  clone.querySelector('#grid').innerHTML = '';
+  clone.querySelector('#modalRoot').innerHTML = '';
+
+  let scriptEl = clone.querySelector('#main-script');
+  const regex = /\/\/ ====== STATE START ======\nconst DEFAULT_STATE = [\s\S]*?\n\/\/ ====== STATE END ======/;
+  const newStateString = `// ====== STATE START ======\nconst DEFAULT_STATE = ${JSON.stringify(state, null, 2)};\n// ====== STATE END ======`;
+  scriptEl.innerHTML = scriptEl.innerHTML.replace(regex, newStateString);
+  clone.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') || 'dark');
+
+  const blob = new Blob(['<!DOCTYPE html>\n<html lang="ko">\n' + clone.innerHTML + '\n</html>'], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'desk-tiles-backup.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function getRefreshRate(type) {
+  if (type === 'binance') return 5000;   
+  return 60000;                          
+}
+
+async function fetchGlobalFx() {
+  try {
+    const res = await fetchWithTimeout('https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW', 3000);
+    if (res.ok) { const j = await res.json(); globalUsdKrw = j.rates.KRW; }
+  } catch (e) {}
+}
+fetchGlobalFx(); setInterval(fetchGlobalFx, 600000);
+
+async function fetchBinanceSymbols() {
+  try {
+    const res = await fetchWithTimeout('https://fapi.binance.com/fapi/v1/exchangeInfo', 3000);
+    const data = await res.json();
+    let html = '';
+    data.symbols.forEach(s => {
+      if (s.quoteAsset === 'USDT' && s.status === 'TRADING') {
+        const base = s.baseAsset;
+        const knownName = KNOWN_NAMES[s.symbol] || 'Futures';
+        html += `<option value="${base}">${base} - ${knownName}</option>\n`;
+      }
+    });
+    document.getElementById('crypto-list').innerHTML = html;
+  } catch(e) {}
+}
+fetchBinanceSymbols();
 
 function uid() { return 't' + Math.random().toString(36).slice(2, 9); }
-
 function fmtPrice(v) {
   if (v == null || isNaN(v)) return '--';
   if (v >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
   if (v >= 1) return v.toFixed(2);
   return v.toFixed(4);
 }
-
-function fmtChangeLine(chg, pct) {
-  const arrow = chg >= 0 ? '\u25B2' : '\u25BC';
-  const sign = chg >= 0 ? '+' : '';
-  return `${arrow}${sign}${chg.toFixed(2)} (${sign}${pct.toFixed(2)}%)`;
-}
-
-async function fetchBinance(tile) {
-  const [qRes, kRes] = await Promise.allSettled([
-    fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(tile.symbol)}`),
-    tile.chart ? fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(tile.symbol)}&interval=15m&limit=30`) : Promise.resolve(null),
-  ]);
-  if (qRes.status !== 'fulfilled' || !qRes.value.ok) throw new Error('quote fetch failed');
-  const q = await qRes.value.json();
-  const price = parseFloat(q.lastPrice);
-  const changePct = parseFloat(q.priceChangePercent);
-  const change = parseFloat(q.priceChange);
-  let spark = null;
-  if (tile.chart && kRes.status === 'fulfilled' && kRes.value && kRes.value.ok) {
-    const klines = await kRes.value.json();
-    spark = klines.map(k => parseFloat(k[4]));
-  }
-  return { price, change, changePct, spark, currency: '$' };
-}
-
-async function fetchFx(tile) {
-  const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=${encodeURIComponent(tile.base)}&symbols=${encodeURIComponent(tile.quote)}`);
-  if (!res.ok) throw new Error('fx fetch failed');
-  const j = await res.json();
-  const rate = j.rates[tile.quote];
-  return { price: rate, change: 0, changePct: 0, spark: null, currency: tile.quote + ' ' };
-}
-
-async function fetchWeather(tile) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${tile.lat}&longitude=${tile.lon}&current=temperature_2m,weather_code,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('weather fetch failed');
-  const j = await res.json();
-  return {
-    temp: j.current.temperature_2m,
-    humidity: j.current.relative_humidity_2m,
-    hi: j.daily.temperature_2m_max[0],
-    lo: j.daily.temperature_2m_min[0],
-    code: j.current.weather_code,
-  };
-}
-
-function weatherLabel(code) {
-  if (code === 0) return 'Clear';
-  if (code <= 3) return 'Cloudy';
-  if (code === 45 || code === 48) return 'Fog';
-  if (code >= 51 && code <= 67) return 'Rain';
-  if (code >= 71 && code <= 77) return 'Snow';
-  if (code >= 80 && code <= 82) return 'Rain';
-  if (code >= 95) return 'Storm';
-  return 'Cloudy';
+function fmtUnifiedChange(change, pct) {
+  if (change == null || pct == null || isNaN(change) || isNaN(pct)) return '--';
+  return `${change >= 0 ? '+' : ''}${pct.toFixed(2)}% (${Math.abs(change).toFixed(2)})`;
 }
 
 function sparkSvg(values) {
   if (!values || values.length < 2) return '';
   const min = Math.min(...values), max = Math.max(...values);
   const range = (max - min) || 1;
-  const w = 200, h = 60;
+  const w = 400, h = 100; 
   const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * w;
-    const y = h - ((v - min) / range) * h;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
+    return { x: (i / (values.length - 1)) * w, y: h - ((v - min) / range) * (h - 10) - 5 };
+  });
+  const pathD = pts.map((p, i) => (i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)).join(' ');
+  const areaD = `${pathD} L ${w} ${h} L 0 ${h} Z`;
   const up = values[values.length - 1] >= values[0];
   const color = up ? 'var(--up)' : 'var(--down)';
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/></svg>`;
+  const gradId = 'grad-' + Math.random().toString(36).slice(2, 9);
+
+  return `
+    <svg class='spark' viewBox='0 0 ${w} ${h}' preserveAspectRatio='none'>
+      <defs>
+        <linearGradient id='${gradId}' x1='0' x2='0' y1='0' y2='1'>
+          <stop offset='0%' stop-color='${color}' stop-opacity='0.5'/>
+          <stop offset='100%' stop-color='${color}' stop-opacity='0.0'/>
+        </linearGradient>
+      </defs>
+      <path d='${areaD}' fill='url(#${gradId})' />
+      <path d='${pathD}' fill='none' stroke='${color}' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' />
+    </svg>
+  `;
+}
+
+function buildTileUI(data, tileId) {
+  const { symbolText, titleText, price, change, changePct, high, low, open, prevClose, iconUrl, fallbackChar, sourceBadge, krwStr, baseUnit, baseCode, quoteCode, sparkHtml, showConverter, extLabel } = data;
+  
+  const cls = change >= 0 ? 'up' : 'down';
+  const imgDisplay = iconUrl ? 'block' : 'none';
+  const fallbackDisplay = iconUrl ? 'none' : 'flex';
+
+  let rangePct = 50; 
+  if (high > low) {
+    rangePct = ((price - low) / (high - low)) * 100;
+    rangePct = Math.max(0, Math.min(100, rangePct));
+  }
+
+  const rangeHtml = (high !== null && low !== null) ? `
+    <div style="margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--dashed-line); z-index: 1; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
+        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">L</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(low)}</span></div>
+        <div style="font-size: 12px; color: var(--muted); letter-spacing: 0.5px; font-weight: 600;">DAY'S RANGE</div>
+        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">H</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(high)}</span></div>
+      </div>
+      <div style="height: 6px; background: var(--range-track); border-radius: 3px; position: relative;">
+        <div style="position: absolute; left: 0; top: 0; bottom: 0; width: ${rangePct}%; background: linear-gradient(90deg, var(--down), var(--up)); border-radius: 3px; opacity: 0.9;"></div>
+        <div style="position: absolute; left: ${rangePct}%; top: -3px; width: 4px; height: 12px; background: var(--range-thumb); border-radius: 2px; transform: translateX(-50%); box-shadow: 0 0 4px var(--range-thumb-shadow);"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 14px;">
+        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">OPEN</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(open)}</span></div>
+        <div style="font-size: 14px;"><span style="color: var(--muted); font-size: 12px; margin-right: 4px; font-weight: 600;">PREV</span><span style="font-weight: 700; color: var(--text);">${fmtPrice(prevClose)}</span></div>
+      </div>
+    </div>
+  ` : '';
+
+  const converterHtml = showConverter ? `
+    <div style="display: flex; gap: 8px; align-items: center; margin-top: 16px; background: rgba(120, 123, 134, 0.1); padding: 8px; border-radius: 8px; border: 1px solid var(--border); z-index: 1; position: relative;">
+      <div style="position: relative; flex: 1;">
+        <input type="number" id="calc-base-${tileId}" value="${baseUnit}" 
+               onfocus="this.select()" onclick="this.select()"
+               oninput="document.getElementById('calc-quote-${tileId}').value = (this.value * ${(price / baseUnit)}).toFixed(2)" 
+               style="width: 100%; background: transparent; border: none; color: var(--text); padding: 4px 38px 4px 4px; font-size: 15px; font-weight: 700; text-align: right; outline: none; font-family: inherit;">
+        <span style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-weight: 700; pointer-events: none;">${baseCode}</span>
+      </div>
+      <span style="color: var(--muted); font-size: 14px; font-weight: 700;">=</span>
+      <div style="position: relative; flex: 1;">
+        <input type="number" id="calc-quote-${tileId}" value="${price.toFixed(2)}" 
+               onfocus="this.select()" onclick="this.select()"
+               oninput="document.getElementById('calc-base-${tileId}').value = (this.value / ${(price / baseUnit)}).toFixed(2)" 
+               style="width: 100%; background: transparent; border: none; color: var(--text); padding: 4px 38px 4px 4px; font-size: 15px; font-weight: 700; text-align: right; outline: none; font-family: inherit;">
+        <span style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-weight: 700; pointer-events: none;">${quoteCode}</span>
+      </div>
+    </div>
+  ` : '';
+
+  const extTag = extLabel ? `<span class="ext-label">${extLabel}</span>` : '';
+
+  return `
+    <div class="tile-header">
+      <img class="tile-icon" src="${iconUrl}" style="display:${imgDisplay};" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+      <div class="tile-icon-fallback" style="display:${fallbackDisplay};">${fallbackChar}</div>
+      <div class="tile-title">
+        <div class="tile-symbol">${symbolText}</div>
+        <div class="tile-label">${titleText}</div>
+      </div>
+    </div>
+    <div class="tile-price-row">
+      <div class="tile-price ${change !== 0 ? cls : ''}" ${change === 0 && !showConverter ? 'style="color: var(--text);"' : ''}>${fmtPrice(price)}</div>
+      <div class="tile-change ${cls}">${change !== 0 ? fmtUnifiedChange(change, changePct) : ''}</div>
+      ${extTag}
+    </div>
+    ${krwStr ? `<div class="tile-krw" style="font-size: ${showConverter ? '14px' : '16px'};">${krwStr}</div>` : ''}
+    ${showConverter ? `<div class="tile-krw" style="font-size: 14px; display: none;">${baseUnit} ${baseCode} = ${fmtPrice(price)} ${quoteCode}</div>` : ''}
+    ${rangeHtml}
+    ${converterHtml}
+    ${sparkHtml || ''}
+    <div class="source-badge">${sourceBadge}</div>
+  `;
+}
+
+async function fetchBinance(tile) {
+  const [qRes, kRes] = await Promise.allSettled([
+    fetchWithTimeout(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${encodeURIComponent(tile.symbol)}`, 3000),
+    tile.chart ? fetchWithTimeout(`https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(tile.symbol)}&interval=15m&limit=96`, 3000) : Promise.resolve(null),
+  ]);
+  if (qRes.status !== 'fulfilled' || !qRes.value.ok) throw new Error('quote fetch failed');
+  const q = await qRes.value.json();
+  
+  let sparkHtml = '';
+  if (tile.chart && kRes.status === 'fulfilled' && kRes.value && kRes.value.ok) {
+    const klines = await kRes.value.json();
+    sparkHtml = sparkSvg(klines.map(k => parseFloat(k[4])));
+  }
+
+  const krwPrice = globalUsdKrw ? parseFloat(q.lastPrice) * globalUsdKrw : 0;
+  const baseTicker = tile.symbol.replace('USDT', '');
+  
+  let iconUrl = `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/32/icon/${baseTicker.toLowerCase()}.png`;
+  if (DOMAIN_MAP[baseTicker]) {
+    iconUrl = `https://logo.clearbit.com/${DOMAIN_MAP[baseTicker]}`;
+  }
+
+  return {
+    symbolText: baseTicker,
+    titleText: KNOWN_NAMES[tile.symbol] || tile.label || baseTicker,
+    price: parseFloat(q.lastPrice),
+    change: parseFloat(q.priceChange),
+    changePct: parseFloat(q.priceChangePercent),
+    high: null, low: null, open: null, prevClose: null, 
+    iconUrl: iconUrl,
+    fallbackChar: baseTicker.charAt(0),
+    sourceBadge: 'BINANCE FUTURES',
+    krwStr: globalUsdKrw ? `≈ ₩${krwPrice >= 100 ? Math.round(krwPrice).toLocaleString() : krwPrice.toFixed(2)}` : '',
+    sparkHtml,
+    extLabel: '',
+    showConverter: false
+  };
+}
+
+async function fetchFx(tile) {
+  const multi = (tile.base === 'JPY' || tile.base === 'VND' || tile.base === 'IDR') ? 100 : 1;
+  const res = await fetchWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(tile.base)}`, 3000);
+  if (!res.ok) throw new Error('fx fetch failed');
+  const data = await res.json();
+  const price = data.rates[tile.quote] * multi;
+
+  let sparkHtml = '';
+  if (tile.chart !== false) {
+    try {
+      const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tile.base}${tile.quote}=X?interval=30m&range=2d`;
+      const p1 = `https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`;
+      const p2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`;
+      let cData;
+      try {
+        // ✨ 여기서 1.5초만에 응답 안 오면 차트 쿨하게 포기하고 넘어갑니다
+        let r1 = await fetchWithTimeout(p1, 1500);
+        let j1 = await r1.json();
+        cData = JSON.parse(j1.contents);
+      } catch(e) {
+        let r2 = await fetchWithTimeout(p2, 1500);
+        cData = await r2.json();
+      }
+      const closes = cData.chart.result[0].indicators.quote[0].close;
+      const validCloses = closes.filter(v => v !== null).map(v => v * multi);
+      if (validCloses.length > 2) sparkHtml = sparkSvg(validCloses);
+    } catch(e) { console.log('fx chart fail (silently ignored)'); }
+  }
+
+  return {
+    symbolText: `${tile.base}/${tile.quote}`,
+    titleText: tile.label || 'CURRENCY',
+    price: price,
+    change: 0,
+    changePct: 0,
+    high: price, low: price, open: price, prevClose: price,
+    iconUrl: `https://flagcdn.com/w40/${tile.base.substring(0,2).toLowerCase()}.png`,
+    fallbackChar: tile.base.charAt(0),
+    sourceBadge: 'EXCHANGE-RATE API',
+    krwStr: '',
+    showConverter: true,
+    baseUnit: multi,
+    baseCode: tile.base,
+    quoteCode: tile.quote,
+    sparkHtml
+  };
 }
 
 async function refreshTile(tile) {
   const el = document.getElementById('screen-' + tile.id);
   if (!el) return;
+  if (el.querySelector('input:focus')) return;
+
   try {
-    let html = '';
-    if (tile.type === 'binance') {
-      const d = await fetchBinance(tile);
-      const cls = d.change >= 0 ? 'up' : 'down';
-      html = `
-        <div class="label">${tile.label || tile.symbol}</div>
-        <div class="price">${d.currency}${fmtPrice(d.price)}</div>
-        <div class="change ${cls}">${fmtChangeLine(d.change, d.changePct)}</div>
-        ${sparkSvg(d.spark)}
-        <div class="badge bl" style="color: var(--muted)">BINANCE</div>
-      `;
-    } else if (tile.type === 'fx') {
-      const d = await fetchFx(tile);
-      html = `
-        <div class="label">${tile.label || (tile.base + '/' + tile.quote)}</div>
-        <div class="price">${d.currency}${fmtPrice(d.price)}</div>
-        <div class="sub">1 ${tile.base} = ${fmtPrice(d.price)} ${tile.quote}</div>
-        <div class="badge bl" style="color: var(--muted)">FRANKFURTER</div>
-      `;
-    } else if (tile.type === 'weather') {
-      const d = await fetchWeather(tile);
-      html = `
-        <div class="label">${tile.label || tile.place || 'Weather'}</div>
-        <div class="price">${Math.round(d.temp)}\u00B0C</div>
-        <div class="change" style="color: var(--muted)">${weatherLabel(d.code)}</div>
-        <div class="sub">H:${Math.round(d.hi)}\u00B0 L:${Math.round(d.lo)}\u00B0 &middot; ${Math.round(d.humidity)}%</div>
-        <div class="badge bl" style="color: var(--muted)">OPEN-METEO</div>
-      `;
-    }
-    el.innerHTML = html + toolsHtml(tile.id);
+    let data;
+    if (tile.type === 'binance') data = await fetchBinance(tile);
+    else if (tile.type === 'fx') data = await fetchFx(tile);
+    
+    el.innerHTML = buildTileUI(data, tile.id);
   } catch (e) {
     el.innerHTML = `
-      <div class="label">${tile.label || tile.symbol || tile.place || ''}</div>
-      <div class="state-msg err">fetch error</div>
-    ` + toolsHtml(tile.id);
+      <div class='label' style="font-weight: 700; color: var(--text);">${tile.label || tile.symbol}</div>
+      <div class='state-msg err' style="margin-top:30%; line-height: 1.5;"><span style="color:var(--down);">fetch error</span></div>
+      <div class="source-badge">WAITING...</div>
+    `;
   }
 }
 
-function toolsHtml(id) {
-  return `<div class="tools">
-    <button onclick="editTile('${id}')" aria-label="edit">edit</button>
-    <button onclick="removeTile('${id}')" aria-label="remove">&times;</button>
-  </div>`;
+function handleDragStart(e) { dragSrcEl = this; this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index); }
+function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
+function handleDragEnter(e) { e.preventDefault(); if (this !== dragSrcEl) this.classList.add('drag-over'); }
+function handleDragLeave(e) { this.classList.remove('drag-over'); }
+function handleDrop(e) {
+  e.stopPropagation(); this.classList.remove('drag-over');
+  if (dragSrcEl !== this) {
+    const srcIdx = parseInt(dragSrcEl.dataset.index, 10);
+    const tgtIdx = parseInt(this.dataset.index, 10);
+    const draggedItem = state.tiles.splice(srcIdx, 1)[0];
+    state.tiles.splice(tgtIdx, 0, draggedItem);
+    saveState(); renderGrid();
+  }
+  return false;
 }
+function handleDragEnd(e) { this.classList.remove('dragging'); document.querySelectorAll('.tile').forEach(el => el.classList.remove('drag-over')); }
 
 function renderGrid() {
   const grid = document.getElementById('grid');
-  grid.style.gridTemplateColumns = `repeat(${state.columns}, minmax(160px, 1fr))`;
   grid.innerHTML = '';
-  state.tiles.forEach(tile => {
+  
+  state.tiles.forEach((tile, index) => {
     const wrap = document.createElement('div');
-    wrap.className = 'tile';
-    wrap.innerHTML = `<div class="screen" id="screen-${tile.id}"><div class="state-msg">loading...</div></div>`;
+    wrap.className = 'tile'; wrap.draggable = true; wrap.dataset.index = index;
+    wrap.addEventListener('dragstart', handleDragStart); wrap.addEventListener('dragover', handleDragOver); wrap.addEventListener('dragenter', handleDragEnter); wrap.addEventListener('dragleave', handleDragLeave); wrap.addEventListener('drop', handleDrop); wrap.addEventListener('dragend', handleDragEnd);
+
+    wrap.innerHTML = `
+      <div class='screen' id='screen-${tile.id}'><div class='state-msg'>loading...</div></div>
+      <div class='tools' onmousedown="event.stopPropagation()">
+        <button onmousedown="editTile('${tile.id}'); event.stopPropagation();" onclick="event.preventDefault();" aria-label='edit'>edit</button>
+        <button onmousedown="removeTile('${tile.id}'); event.stopPropagation();" onclick="event.preventDefault();" aria-label='remove'>&times;</button>
+      </div>
+    `;
     grid.appendChild(wrap);
   });
-  const addWrap = document.createElement('div');
-  addWrap.className = 'tile';
-  addWrap.innerHTML = `<div class="screen"><div class="empty-tile" onclick="openAddModal()">+ add tile</div></div>`;
+  
+  const addWrap = document.createElement('div'); addWrap.className = 'tile'; addWrap.style.cursor = 'default';
+  addWrap.innerHTML = `<div class='screen' style="align-items:center; justify-content:center;"><div class='empty-tile' style="width:100%; border:2px dashed var(--border);" onclick='openAddModal()'>+ add tile</div></div>`;
   grid.appendChild(addWrap);
 
-  Object.values(timers).forEach(clearInterval);
-  timers = {};
+  Object.values(timers).forEach(clearInterval); timers = {};
   state.tiles.forEach(tile => {
     refreshTile(tile);
-    timers[tile.id] = setInterval(() => refreshTile(tile), REFRESH_MS);
+    timers[tile.id] = setInterval(() => refreshTile(tile), getRefreshRate(tile.type));
   });
 }
 
-function removeTile(id) {
-  state.tiles = state.tiles.filter(t => t.id !== id);
-  if (timers[id]) clearInterval(timers[id]);
-  renderGrid();
-}
-
+function removeTile(id) { state.tiles = state.tiles.filter(t => t.id !== id); if (timers[id]) clearInterval(timers[id]); saveState(); renderGrid(); }
 function openAddModal() { openTileModal(null); }
 function editTile(id) { openTileModal(state.tiles.find(t => t.id === id)); }
+
+function makeComboBox(inputId, listId) {
+  const input = document.getElementById(inputId);
+  const datalist = document.getElementById(listId);
+  if (!input || !datalist || input.parentNode.classList.contains('combo-box')) return;
+
+  input.removeAttribute('list');
+  input.setAttribute('autocomplete', 'off');
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'combo-box';
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
+
+  const arrow = document.createElement('span');
+  arrow.className = 'combo-arrow';
+  arrow.innerHTML = '▼';
+  wrapper.appendChild(arrow);
+
+  const listDiv = document.createElement('div');
+  listDiv.className = 'combo-list';
+  wrapper.appendChild(listDiv);
+
+  const options = Array.from(datalist.options).map(opt => ({
+    val: opt.value,
+    text: opt.textContent
+  }));
+
+  function renderList(filter = '') {
+    listDiv.innerHTML = '';
+    const f = filter.toLowerCase();
+    let count = 0;
+    for (let o of options) {
+      if (o.val.toLowerCase().includes(f) || o.text.toLowerCase().includes(f)) {
+        const div = document.createElement('div');
+        div.className = 'combo-item';
+        div.textContent = o.text;
+        div.onmousedown = (e) => {
+          e.preventDefault(); 
+          input.value = o.val;
+          listDiv.classList.remove('show');
+          input.dispatchEvent(new Event('input'));
+        };
+        listDiv.appendChild(div);
+        count++;
+      }
+    }
+    if (count === 0) {
+      const div = document.createElement('div');
+      div.className = 'combo-item';
+      div.style.color = 'var(--muted)';
+      div.style.cursor = 'default';
+      div.textContent = '검색 결과가 없습니다.';
+      listDiv.appendChild(div);
+    }
+  }
+
+  input.addEventListener('focus', () => {
+    input.select();
+    renderList(''); 
+    listDiv.classList.add('show');
+  });
+
+  input.addEventListener('input', () => {
+    renderList(input.value);
+    listDiv.classList.add('show');
+  });
+
+  input.addEventListener('blur', () => {
+    listDiv.classList.remove('show');
+  });
+
+  arrow.addEventListener('mousedown', (e) => {
+    e.preventDefault(); 
+    if (listDiv.classList.contains('show')) {
+      listDiv.classList.remove('show');
+    } else {
+      input.focus();
+    }
+  });
+}
 
 function openTileModal(existing) {
   const root = document.getElementById('modalRoot');
   const isEdit = !!existing;
-  const t = existing || { type: 'binance', symbol: '', label: '', chart: true, base: 'USD', quote: 'KRW', lat: '', lon: '', place: '' };
+  const t = existing || { type: 'binance', symbol: 'TSLAUSDT', label: 'TESLA', chart: true, base: 'USD', quote: 'KRW', customLabel: false };
+  
   root.innerHTML = `
-    <div class="modal-backdrop" id="modalBackdrop">
-      <div class="modal">
+    <div class='modal-backdrop' id='modalBackdrop'>
+      <div class='modal'>
         <h2>${isEdit ? 'Edit tile' : 'Add tile'}</h2>
-        <div class="field">
+        <div class='field'>
           <label>Type</label>
-          <select id="mType">
-            <option value="binance">Stock / crypto (Binance)</option>
-            <option value="fx">Exchange rate</option>
-            <option value="weather">Weather</option>
+          <select id='mType'>
+            <option value='binance'>Crypto & Stocks (Binance Futures)</option>
+            <option value='fx'>Exchange rate</option>
           </select>
         </div>
-        <div id="mFields"></div>
-        <div class="field">
-          <label>Label (optional)</label>
-          <input id="mLabel" type="text" placeholder="INTEL" value="${t.label || ''}">
-        </div>
-        <div class="actions">
-          <button onclick="closeModal()">Cancel</button>
-          <button class="btn-primary" onclick="saveTileModal(${isEdit ? `'${t.id}'` : 'null'})">Save</button>
+        <div id='mFields'></div>
+        <div class='actions'>
+          <button onclick='closeModal()'>Cancel</button>
+          <button class='btn-primary' id='saveBtn' onclick="saveTileModal(${isEdit ? `'${t.id}'` : 'null'})">Save</button>
         </div>
       </div>
     </div>
   `;
   document.getElementById('mType').value = t.type;
   renderModalFields(t);
-  document.getElementById('mType').addEventListener('change', () => renderModalFields({}));
-  document.getElementById('modalBackdrop').addEventListener('click', e => {
-    if (e.target.id === 'modalBackdrop') closeModal();
+  
+  document.getElementById('mType').addEventListener('change', () => { 
+    renderModalFields({}); 
   });
+  
+  document.getElementById('modalBackdrop').addEventListener('click', e => { if (e.target.id === 'modalBackdrop') closeModal(); });
+  document.getElementById('modalBackdrop').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('saveBtn').click(); } });
 }
 
 function renderModalFields(t) {
   const type = document.getElementById('mType').value;
   const box = document.getElementById('mFields');
+  
   if (type === 'binance') {
+    let displaySymbol = t.symbol || '';
+    if (displaySymbol.endsWith('USDT')) displaySymbol = displaySymbol.replace('USDT', '');
+
     box.innerHTML = `
-      <div class="field">
-        <label>Binance symbol</label>
-        <input id="mSymbol" type="text" placeholder="INTCUSDT" value="${t.symbol || ''}">
+      <div class='field'>
+        <label>Symbol (TSLA, INTC, BTC, AMZN...)</label>
+        <input id='mSymbol' type='text' placeholder='e.g., TSLA, INTC, BTC...' value='${displaySymbol}'>
       </div>
-      <div class="field">
-        <label><input type="checkbox" id="mChart" style="width:auto" ${t.chart !== false ? 'checked' : ''}> Show chart</label>
-      </div>
-      <div class="hint">No API key needed. Works for crypto (BTCUSDT) and Binance's stock perpetuals (e.g. INTCUSDT). Symbol must match Binance's own listing exactly.</div>
+      <div class='field'><label>Custom Label (Optional)</label><input id='mLabel' type='text' placeholder='지정 이름' value='${t.customLabel ? t.label : ''}'></div>
+      <div class='field'><label><input type='checkbox' id='mChart' style='width:auto' ${t.chart !== false ? 'checked' : ''}> Show chart</label></div>
+      <div class='hint'>바이낸스 선물(Futures)에 상장된 모든 코인과 주식 종목(TSLA, INTC, AMZN 등)을 <b>API 키 없이 평생 무료</b>로 긁어옵니다!</div>
     `;
+    setTimeout(() => { makeComboBox('mSymbol', 'crypto-list'); }, 0);
   } else if (type === 'fx') {
     box.innerHTML = `
-      <div class="row">
-        <div class="field"><label>From</label><input id="mBase" type="text" placeholder="USD" value="${t.base || 'USD'}"></div>
-        <div class="field"><label>To</label><input id="mQuote" type="text" placeholder="KRW" value="${t.quote || 'KRW'}"></div>
+      <div class='row'>
+        <div class='field'><label>From</label><input id='mBase' type='text' placeholder='USD' value='${t.base || 'USD'}'></div>
+        <div class='field'><label>To</label><input id='mQuote' type='text' placeholder='KRW' value='${t.quote || 'KRW'}'></div>
       </div>
-      <div class="hint">No API key needed (Frankfurter). 3-letter currency codes.</div>
+      <div class='field'><label>Custom Label (Optional)</label><input id='mLabel' type='text' placeholder='CURRENCY' value='${t.label || ''}'></div>
+      <div class='field'><label><input type='checkbox' id='mChart' style='width:auto' ${t.chart !== false ? 'checked' : ''}> Show chart</label></div>
+      <div class='hint'>자주 쓰는 국가 이름(미국, 베트남 등)을 검색할 수 있습니다. JPY, VND, IDR은 100단위 기준으로 자동 계산됩니다.</div>
     `;
-  } else if (type === 'weather') {
-    box.innerHTML = `
-      <div class="row">
-        <div class="field"><label>Latitude</label><input id="mLat" type="text" placeholder="37.5665" value="${t.lat || ''}"></div>
-        <div class="field"><label>Longitude</label><input id="mLon" type="text" placeholder="126.9780" value="${t.lon || ''}"></div>
-      </div>
-      <div class="field"><label>Place name</label><input id="mPlace" type="text" placeholder="Seoul" value="${t.place || ''}"></div>
-      <div class="hint">No API key needed (Open-Meteo).</div>
-    `;
+    setTimeout(() => { 
+      makeComboBox('mBase', 'fx-list'); 
+      makeComboBox('mQuote', 'fx-list'); 
+    }, 0);
   }
 }
 
 function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 
-function saveTileModal(existingId) {
+async function saveTileModal(existingId) {
   const type = document.getElementById('mType').value;
-  const label = document.getElementById('mLabel').value.trim();
-  let tile = { id: existingId || uid(), type, label };
+  let tile = { id: existingId || uid(), type };
 
   if (type === 'binance') {
-    const symbol = document.getElementById('mSymbol').value.trim().toUpperCase();
-    if (!symbol) { alert('Enter a Binance symbol first'); return; }
-    tile.symbol = symbol;
+    const baseSymbol = document.getElementById('mSymbol').value.trim().toUpperCase();
+    if (!baseSymbol) { alert('Enter a symbol first'); return; }
+    
+    let customLabel = document.getElementById('mLabel').value.trim();
+    tile.symbol = baseSymbol.endsWith('USDT') ? baseSymbol : baseSymbol + 'USDT';
+    tile.customLabel = customLabel !== '';
+    
+    if (!customLabel && KNOWN_NAMES[tile.symbol]) tile.label = KNOWN_NAMES[tile.symbol];
+    else tile.label = customLabel || baseSymbol;
+    
     tile.chart = document.getElementById('mChart').checked;
+
+    if (existingId) state.tiles[state.tiles.findIndex(t => t.id === existingId)] = tile;
+    else state.tiles.push(tile);
+    
+    saveState(); closeModal(); renderGrid();
   } else if (type === 'fx') {
-    const base = document.getElementById('mBase').value.trim().toUpperCase();
-    const quote = document.getElementById('mQuote').value.trim().toUpperCase();
+    let base = document.getElementById('mBase').value.trim().toUpperCase();
+    let quote = document.getElementById('mQuote').value.trim().toUpperCase();
+    base = base.substring(0, 3); quote = quote.substring(0, 3);
     if (!base || !quote) { alert('Enter both currency codes'); return; }
-    tile.base = base; tile.quote = quote;
-  } else if (type === 'weather') {
-    const lat = parseFloat(document.getElementById('mLat').value);
-    const lon = parseFloat(document.getElementById('mLon').value);
-    if (isNaN(lat) || isNaN(lon)) { alert('Enter latitude and longitude'); return; }
-    tile.lat = lat; tile.lon = lon;
-    tile.place = document.getElementById('mPlace').value.trim();
+    
+    tile.base = base; tile.quote = quote; tile.label = document.getElementById('mLabel').value.trim();
+    tile.chart = document.getElementById('mChart').checked;
+    
+    if (existingId) state.tiles[state.tiles.findIndex(t => t.id === existingId)] = tile;
+    else state.tiles.push(tile);
+    
+    saveState(); closeModal(); renderGrid();
   }
-
-  if (existingId) {
-    const idx = state.tiles.findIndex(t => t.id === existingId);
-    state.tiles[idx] = tile;
-  } else {
-    state.tiles.push(tile);
-  }
-  closeModal();
-  renderGrid();
 }
 
-function initColSelect() {
-  const sel = document.getElementById('colSelect');
-  for (let i = 1; i <= 6; i++) {
-    const opt = document.createElement('option');
-    opt.value = i; opt.textContent = i;
-    if (i === state.columns) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  sel.addEventListener('change', () => {
-    state.columns = parseInt(sel.value, 10);
-    renderGrid();
-  });
-}
-
-document.getElementById('addTileBtn').addEventListener('click', openAddModal);
-initColSelect();
-renderGrid();
+delayRender = () => { document.getElementById('addTileBtn').addEventListener('click', openAddModal); renderGrid(); }
+delayRender();
 </script>
 </body>
 </html>
