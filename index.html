@@ -332,7 +332,54 @@ const DOMAIN_MAP = {
   'SUI': 'sui.io',
   'APT': 'aptosfoundation.org',
   'ARB': 'arbitrum.foundation',
-  'PEPE': 'pepe.vip'
+  'PEPE': 'pepe.vip',
+  'CL': 'cmegroup.com',
+  // 원자재(CME/ICE 상장 코드 기준)
+  'GC': 'cmegroup.com',
+  'SI': 'cmegroup.com',
+  'NG': 'cmegroup.com',
+  'HG': 'cmegroup.com',
+  'ZC': 'cmegroup.com',
+  'ZW': 'cmegroup.com',
+  'ZS': 'cmegroup.com',
+  'PL': 'cmegroup.com',
+  'PA': 'cmegroup.com',
+  'BZ': 'theice.com',
+  // 주요 종목 추가
+  'JPM': 'jpmorganchase.com',
+  'V': 'visa.com',
+  'MA': 'mastercard.com',
+  'WMT': 'walmart.com',
+  'KO': 'coca-cola.com',
+  'PEP': 'pepsico.com',
+  'DIS': 'disney.com',
+  'BA': 'boeing.com',
+  'XOM': 'exxonmobil.com',
+  'CVX': 'chevron.com',
+  'JNJ': 'jnj.com',
+  'PG': 'pg.com',
+  'UNH': 'unitedhealthgroup.com',
+  'HD': 'homedepot.com',
+  'ORCL': 'oracle.com',
+  'CRM': 'salesforce.com',
+  'ADBE': 'adobe.com',
+  'PYPL': 'paypal.com',
+  'SQ': 'block.xyz',
+  'UBER': 'uber.com',
+  'ABNB': 'airbnb.com',
+  'SNOW': 'snowflake.com',
+  'PLTR': 'palantir.com',
+  'IBM': 'ibm.com',
+  'CSCO': 'cisco.com',
+  'NKE': 'nike.com',
+  'SBUX': 'starbucks.com',
+  'MCD': 'mcdonalds.com',
+  'BABA': 'alibaba.com',
+  'F': 'ford.com',
+  'GM': 'gm.com',
+  'GE': 'ge.com',
+  'T': 'att.com',
+  'VZ': 'verizon.com'
 };
 
 const KNOWN_NAMES = {
@@ -358,7 +405,18 @@ const KNOWN_NAMES = {
   'SUIUSDT': 'SUI',
   'APTUSDT': 'APTOS',
   'ARBUSDT': 'ARBITRUM',
-  'PEPEUSDT': 'PEPE'
+  'PEPEUSDT': 'PEPE',
+  'CLUSDT': 'WTI',
+  'GCUSDT': 'GOLD',
+  'SIUSDT': 'SILVER',
+  'NGUSDT': 'NATURAL GAS',
+  'HGUSDT': 'COPPER',
+  'ZCUSDT': 'CORN',
+  'ZWUSDT': 'WHEAT',
+  'ZSUSDT': 'SOYBEAN',
+  'PLUSDT': 'PLATINUM',
+  'PAUSDT': 'PALLADIUM',
+  'BZUSDT': 'BRENT CRUDE'
 };
 
 function getDefaultState() {
@@ -373,7 +431,7 @@ try {
 
 function saveState() { localStorage.setItem('desk_tiles_state', JSON.stringify(state)); }
 
-let timers = {};        // tile.id -> interval id (타일이 그대로면 재사용, 불필요한 재조회 방지)
+let timers = {};        // 타일이 그대로면 재사용, 불필요한 재조회 방지
 let tileCache = {};      // tile.id -> 가장 최근 성공한 fetch 결과 (재렌더 시 깜빡임/재조회 방지)
 let chartDataStore = {}; // tile.id -> 차트 원본 데이터 (호버 툴팁용)
 let globalUsdKrw = null;
