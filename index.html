@@ -262,6 +262,8 @@
     </div>
     <button id="themeToggleBtn" aria-label="Toggle Theme">☀️</button>
     <button class="btn-export" onclick="exportHTML()" aria-label="Export Dashboard">💾 Save HTML</button>
+    <input type="file" id="importFileInput" accept=".html,.json" style="display:none">
+    <button class="btn-export" id="importBtn" aria-label="Import Backup">📂 Load backup</button>
     <button class="btn-primary" id="addTileBtn">+ Add tile</button>
   </div>
 </header>
@@ -335,15 +337,10 @@ const DOMAIN_MAP = {
   'PEPE': 'pepe.vip',
   'CL': 'cmegroup.com',
   // 원자재(CME/ICE 상장 코드 기준)
-  'GC': 'cmegroup.com',
-  'SI': 'cmegroup.com',
-  'NG': 'cmegroup.com',
-  'HG': 'cmegroup.com',
-  'ZC': 'cmegroup.com',
-  'ZW': 'cmegroup.com',
-  'ZS': 'cmegroup.com',
-  'PL': 'cmegroup.com',
-  'PA': 'cmegroup.com',
+  // 원자재 (실제 바이낸스 선물에 상장된 심볼만 — CME 관행 코드가 아니라 바이낸스 고유 티커 기준)
+  'XAU': 'cmegroup.com',
+  'XAG': 'cmegroup.com',
+  'NATGAS': 'cmegroup.com',
   'BZ': 'theice.com',
   // 주요 종목 추가
   'JPM': 'jpmorganchase.com',
@@ -407,15 +404,9 @@ const KNOWN_NAMES = {
   'ARBUSDT': 'ARBITRUM',
   'PEPEUSDT': 'PEPE',
   'CLUSDT': 'WTI',
-  'GCUSDT': 'GOLD',
-  'SIUSDT': 'SILVER',
-  'NGUSDT': 'NATURAL GAS',
-  'HGUSDT': 'COPPER',
-  'ZCUSDT': 'CORN',
-  'ZWUSDT': 'WHEAT',
-  'ZSUSDT': 'SOYBEAN',
-  'PLUSDT': 'PLATINUM',
-  'PAUSDT': 'PALLADIUM',
+  'XAUUSDT': 'GOLD',
+  'XAGUSDT': 'SILVER',
+  'NATGASUSDT': 'NATURAL GAS',
   'BZUSDT': 'BRENT CRUDE'
 };
 
@@ -489,6 +480,40 @@ function exportHTML() {
   a.href = url; a.download = 'desk-tiles-backup.html';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// Save HTML로 내보낸 백업 파일(.html) 또는 순수 상태 JSON(.json)을 다시 불러와
+// 지금 열려있는 페이지에 그대로 적용합니다.
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result;
+      let importedState;
+
+      if (file.name.toLowerCase().endsWith('.json')) {
+        importedState = JSON.parse(text);
+      } else {
+        // html 백업 파일 안에 있는 <script type="application/json" id="stateData"> 블록만 뽑아냅니다.
+        const match = text.match(/<script type=["']application\/json["'] id=["']stateData["']>([\s\S]*?)<\/script>/);
+        if (!match) throw new Error('백업 파일 안에서 상태 데이터를 찾지 못했습니다.');
+        importedState = JSON.parse(match[1]);
+      }
+
+      if (!importedState || !Array.isArray(importedState.tiles)) {
+        throw new Error('올바른 Desk Tiles 백업 파일이 아닙니다.');
+      }
+
+      state = importedState;
+      saveState();
+      renderGrid();
+      alert(`백업을 불러왔습니다 (타일 ${state.tiles.length}개).`);
+    } catch (err) {
+      alert('백업 파일을 불러오는 데 실패했습니다: ' + err.message);
+    }
+  };
+  reader.onerror = () => alert('파일을 읽는 데 실패했습니다.');
+  reader.readAsText(file);
 }
 
 function getRefreshRate(type) {
@@ -770,6 +795,13 @@ async function fetchYahooStock(tile) {
   const prevClose = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
   if (price == null || prevClose == null) throw new Error('yahoo: missing price');
 
+  // 시간대상으로는 정규장(09:30~16:00 ET)인데도 실제로는 공휴일이라 장이 안 열렸을 수 있습니다.
+  // regularMarketTime(마지막 시세 갱신 시각)이 너무 오래됐다면 휴장으로 보고 바이낸스로 넘깁니다.
+  if (meta.regularMarketTime) {
+    const ageMinutes = (Date.now() / 1000 - meta.regularMarketTime) / 60;
+    if (ageMinutes > 20) throw new Error('yahoo: stale quote (market holiday?)');
+  }
+
   const change = price - prevClose;
   const changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0;
 
@@ -825,17 +857,16 @@ async function fetchFx(tile) {
   // 두 요청을 동시에 시작해서 전체 대기 시간을 줄입니다.
   const quotePromise = fetchWithTimeout(`https://open.er-api.com/v6/latest/${encodeURIComponent(tile.base)}`, 3000);
 
-  let chartPromise = Promise.resolve(null);
-  if (tile.chart !== false) {
-    const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tile.base}${tile.quote}=X?interval=${yInt}&range=${yRange}`;
-    const viaAllOrigins = fetchWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`, 4000)
-      .then(async r => { const j = await r.json(); return JSON.parse(j.contents); });
-    const viaCodetabs = fetchWithTimeout(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 4000)
-      .then(r => r.json());
-    // 두 프록시를 순서대로 시도하는 대신 동시에 요청해서, 먼저 응답하는 쪽을 사용합니다.
-    // (둘 다 실패하면 차트 없이 진행 — 환율 시세 자체는 정상 표시됩니다)
-    chartPromise = Promise.any([viaAllOrigins, viaCodetabs]).catch(() => null);
-  }
+  // 전일 대비 등락을 구하려면 야후의 전일 종가(meta)가 필요해서, 차트 표시를 꺼둔 타일이어도
+  // 이 요청 자체는 항상 시도합니다. 실제 스파크라인을 그릴지는 여전히 tile.chart로 결정합니다.
+  const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${tile.base}${tile.quote}=X?interval=${yInt}&range=${yRange}`;
+  const viaAllOrigins = fetchWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`, 4000)
+    .then(async r => { const j = await r.json(); return JSON.parse(j.contents); });
+  const viaCodetabs = fetchWithTimeout(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 4000)
+    .then(r => r.json());
+  // 두 프록시를 순서대로 시도하는 대신 동시에 요청해서, 먼저 응답하는 쪽을 사용합니다.
+  // (둘 다 실패하면 차트/등락 없이 진행 — 환율 시세 자체는 정상 표시됩니다)
+  const chartPromise = Promise.any([viaAllOrigins, viaCodetabs]).catch(() => null);
 
   const [res, cData] = await Promise.all([quotePromise, chartPromise]);
   if (!res.ok) throw new Error('fx fetch failed');
@@ -843,28 +874,40 @@ async function fetchFx(tile) {
   const price = data.rates[tile.quote] * multi;
 
   let sparkHtml = '';
+  let change = 0, changePct = 0;
   if (cData) {
     try {
-      const timestamps = cData.chart.result[0].timestamp;
-      const closes = cData.chart.result[0].indicators.quote[0].close;
-      const chartData = [];
-      if (timestamps && closes) {
-        for(let i = 0; i < closes.length; i++) {
-          if(closes[i] !== null) {
-            chartData.push({ t: timestamps[i] * 1000, v: closes[i] * multi });
+      const result = cData.chart.result[0];
+      const meta = result.meta || {};
+      const prevCloseRaw = meta.previousClose != null ? meta.previousClose : meta.chartPreviousClose;
+      if (prevCloseRaw != null) {
+        const prevClose = prevCloseRaw * multi;
+        change = price - prevClose;
+        changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+      }
+
+      if (tile.chart !== false) {
+        const timestamps = result.timestamp;
+        const closes = result.indicators.quote[0].close;
+        const chartData = [];
+        if (timestamps && closes) {
+          for(let i = 0; i < closes.length; i++) {
+            if(closes[i] !== null) {
+              chartData.push({ t: timestamps[i] * 1000, v: closes[i] * multi });
+            }
           }
         }
+        if (chartData.length > 2) sparkHtml = sparkSvg(chartData, tile.id);
       }
-      if (chartData.length > 2) sparkHtml = sparkSvg(chartData, tile.id);
-    } catch(e) { console.log('fx chart parse fail (silently ignored)'); }
+    } catch(e) { console.log('fx chart/change parse fail (silently ignored)'); }
   }
 
   return {
     symbolText: `${tile.base}/${tile.quote}`,
     titleText: tile.label || 'CURRENCY',
     price: price,
-    change: 0,
-    changePct: 0,
+    change: change,
+    changePct: changePct,
     iconUrl: `https://flagcdn.com/w40/${tile.base.substring(0,2).toLowerCase()}.png`,
     fallbackChar: tile.base.charAt(0),
     sourceBadge: 'EXCHANGE-RATE API',
@@ -897,7 +940,9 @@ async function refreshTile(tile) {
           data = await fetchYahooStock(tile);
         } catch (yErr) {
           data = await fetchBinance(tile);
-          data.sourceBadge = 'BINANCE FUTURES · FALLBACK';
+          // 오래된 시세라 던진 에러(공휴일 추정)와, 그 외 프록시/네트워크 실패를 구분해서 표시합니다.
+          const isStaleHoliday = yErr && String(yErr.message || '').includes('stale');
+          data.sourceBadge = isStaleHoliday ? 'BINANCE FUTURES · HOLIDAY' : 'BINANCE FUTURES · FALLBACK';
         }
       } else {
         data = await fetchBinance(tile);
@@ -1192,6 +1237,12 @@ async function saveTileModal(existingId) {
 }
 
 document.getElementById('addTileBtn').addEventListener('click', openAddModal);
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFileInput').click());
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) importBackup(file);
+  e.target.value = ''; // 같은 파일을 다시 선택해도 change 이벤트가 또 발생하도록 초기화
+});
 renderGrid();
 </script>
 </body>
