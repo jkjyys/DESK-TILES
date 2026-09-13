@@ -990,20 +990,28 @@ function handleDragStart(e) {
   e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index);
 }
 function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
-function handleDragEnter(e) { e.preventDefault(); if (this !== dragSrcEl) this.classList.add('drag-over'); }
+function handleDragEnter(e) {
+  e.preventDefault();
+  if (!dragSrcEl || this === dragSrcEl) return;
+  this.classList.add('drag-over');
+
+  // 다른 타일 위로 들어오는 순간 실제로 그 자리에 끼워 넣어서, 놓으면 여기 들어간다는
+  // 반투명(드래그 중이라 흐려진) 미리보기를 그 자리에서 바로 보여줍니다.
+  const grid = document.getElementById('grid');
+  const children = Array.from(grid.children);
+  const srcIndex = children.indexOf(dragSrcEl);
+  const tgtIndex = children.indexOf(this);
+  if (srcIndex === -1 || tgtIndex === -1) return;
+
+  if (srcIndex < tgtIndex) {
+    grid.insertBefore(dragSrcEl, this.nextSibling);
+  } else {
+    grid.insertBefore(dragSrcEl, this);
+  }
+}
 function handleDragLeave(e) { this.classList.remove('drag-over'); }
 function handleDrop(e) {
   e.stopPropagation(); this.classList.remove('drag-over');
-  if (dragSrcEl !== this) {
-    const srcIdx = parseInt(dragSrcEl.dataset.index, 10);
-    const tgtIdx = parseInt(this.dataset.index, 10);
-    const draggedItem = state.tiles.splice(srcIdx, 1)[0];
-    state.tiles.splice(tgtIdx, 0, draggedItem);
-    saveState();
-    // 타일 id가 그대로 유지되므로 renderGrid가 캐시된 데이터로 즉시 다시 그리고,
-    // 진행 중인 타이머도 그대로 재사용해 불필요한 재조회가 일어나지 않습니다.
-    renderGrid();
-  }
   return false;
 }
 function handleDragEnd(e) {
@@ -1012,6 +1020,22 @@ function handleDragEnd(e) {
   isDragging = false;
   document.body.classList.remove('dragging-active');
   window.removeEventListener('touchmove', noopTouchMoveBlocker, { passive: false });
+
+  // 드래그 도중 이미 실제 DOM 순서가 최종 위치로 재배치되어 있으므로, 그 순서를 그대로
+  // state.tiles에 반영합니다. (드롭이 유효한 자리에서 안 끝났어도 마지막 상태를 그대로 반영)
+  const grid = document.getElementById('grid');
+  const orderedIds = Array.from(grid.children).map(el => el.dataset && el.dataset.tileId).filter(Boolean);
+  const byId = {};
+  state.tiles.forEach(t => { byId[t.id] = t; });
+  const reordered = orderedIds.map(id => byId[id]).filter(Boolean);
+  state.tiles.forEach(t => { if (!reordered.includes(t)) reordered.push(t); }); // 방어적 보정
+  state.tiles = reordered;
+  saveState();
+
+  // 타일 id가 그대로 유지되므로 renderGrid가 캐시된 데이터로 즉시 다시 그리고,
+  // 진행 중인 타이머도 그대로 재사용해 불필요한 재조회가 일어나지 않습니다.
+  renderGrid();
+  dragSrcEl = null;
 }
 
 function renderGrid() {
@@ -1020,7 +1044,7 @@ function renderGrid() {
   
   state.tiles.forEach((tile, index) => {
     const wrap = document.createElement('div');
-    wrap.className = 'tile'; wrap.draggable = true; wrap.dataset.index = index;
+    wrap.className = 'tile'; wrap.draggable = true; wrap.dataset.index = index; wrap.dataset.tileId = tile.id;
     wrap.addEventListener('dragstart', handleDragStart); wrap.addEventListener('dragover', handleDragOver); wrap.addEventListener('dragenter', handleDragEnter); wrap.addEventListener('dragleave', handleDragLeave); wrap.addEventListener('drop', handleDrop); wrap.addEventListener('dragend', handleDragEnd);
 
     const cached = tileCache[tile.id];
