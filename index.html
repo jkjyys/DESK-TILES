@@ -419,6 +419,34 @@ const KNOWN_NAMES = {
   'BZUSDT': 'BRENT CRUDE'
 };
 
+// 실제 '주식' 티커만 모아둔 목록. 이 목록에 있는 종목만 정규장 시간에 야후 파이낸스로 전환합니다.
+// 코인(BTC 등)과 원자재(CL, GC 등)는 원래 24시간 거래라 정규장 개념이 없어서 항상 바이낸스만 씁니다.
+const STOCK_TICKERS = new Set([
+  'INTC','TSLA','AMZN','MSTR','AAPL','MSFT','NVDA','GOOGL','GOOG','META','AMD','NFLX','COIN','HOOD',
+  'JPM','V','MA','WMT','KO','PEP','DIS','BA','XOM','CVX','JNJ','PG','UNH','HD','ORCL','CRM','ADBE',
+  'PYPL','SQ','UBER','ABNB','SNOW','PLTR','IBM','CSCO','NKE','SBUX','MCD','BABA','F','GM','GE','T','VZ'
+]);
+
+// 뉴욕 증시 정규장(09:30~16:00 ET, 평일) 여부만 판단합니다. 공휴일까지는 반영하지 않지만,
+// 공휴일엔 야후 쪽 fetch가 실패하거나 이상한 값을 주면 자동으로 바이낸스로 폴백되므로 문제없습니다.
+function isNyseRegularHours() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false
+  }).formatToParts(new Date());
+  const map = {};
+  parts.forEach(p => { map[p.type] = p.value; });
+  if (map.weekday === 'Sat' || map.weekday === 'Sun') return false;
+
+  let hour = parseInt(map.hour, 10);
+  if (hour === 24) hour = 0; // Intl의 hour12:false가 자정을 '24'로 주는 경우 보정
+  const minute = parseInt(map.minute, 10);
+  const minutesNow = hour * 60 + minute;
+  const marketOpen = 9 * 60 + 30;  // 09:30
+  const marketClose = 16 * 60;     // 16:00
+  return minutesNow >= marketOpen && minutesNow < marketClose;
+}
+
 function getDefaultState() {
   return JSON.parse(document.getElementById('stateData').textContent);
 }
@@ -713,6 +741,76 @@ async function fetchBinance(tile) {
   };
 }
 
+// 정규장 시간의 실제 주식 시세를 야후 파이낸스에서 가져옵니다.
+// 야후는 정식 공개 API가 없어서, 환율 차트 때와 동일한 방식(v8/finance/chart 비공식 엔드포인트를
+// allorigins/codetabs 프록시로 우회)을 씁니다. 이 엔드포인트는 시세(meta)와 차트(indicators)를
+// 한 번의 호출로 같이 주기 때문에 바이낸스처럼 두 번 요청할 필요가 없습니다.
+async function fetchYahooStock(tile) {
+  const ticker = tile.symbol.replace('USDT', '');
+
+  let yInt = '5m', yRange = '1d';
+  const tf = tile.tf || '1D';
+  if (tf === '1W') { yInt = '15m'; yRange = '5d'; }
+  else if (tf === '1M') { yInt = '1d'; yRange = '1mo'; }
+  else if (tf === '1Y') { yInt = '1d'; yRange = '1y'; }
+  else if (tf === '5Y') { yInt = '1wk'; yRange = '5y'; }
+
+  const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${yInt}&range=${yRange}`;
+  const viaAllOrigins = fetchWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`, 4000)
+    .then(async r => { const j = await r.json(); return JSON.parse(j.contents); });
+  const viaCodetabs = fetchWithTimeout(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yUrl)}`, 4000)
+    .then(r => r.json());
+  const cData = await Promise.any([viaAllOrigins, viaCodetabs]);
+
+  const result = cData && cData.chart && cData.chart.result && cData.chart.result[0];
+  if (!result || !result.meta) throw new Error('yahoo: no data');
+
+  const meta = result.meta;
+  const price = meta.regularMarketPrice;
+  const prevClose = meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose;
+  if (price == null || prevClose == null) throw new Error('yahoo: missing price');
+
+  const change = price - prevClose;
+  const changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+
+  let sparkHtml = '';
+  if (tile.chart !== false) {
+    const timestamps = result.timestamp;
+    const closes = result.indicators && result.indicators.quote && result.indicators.quote[0] ? result.indicators.quote[0].close : null;
+    if (timestamps && closes) {
+      const chartData = [];
+      for (let i = 0; i < closes.length; i++) {
+        if (closes[i] !== null) chartData.push({ t: timestamps[i] * 1000, v: closes[i] });
+      }
+      if (chartData.length > 2) sparkHtml = sparkSvg(chartData, tile.id);
+    }
+  }
+
+  const krwPrice = globalUsdKrw ? price * globalUsdKrw : 0;
+
+  let iconUrl = `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/32/icon/${ticker.toLowerCase()}.png`;
+  if (DOMAIN_MAP[ticker]) {
+    iconUrl = `https://www.google.com/s2/favicons?domain=${DOMAIN_MAP[ticker]}&sz=128`;
+  }
+
+  return {
+    symbolText: ticker,
+    titleText: KNOWN_NAMES[tile.symbol] || tile.label || ticker,
+    price: price,
+    change: change,
+    changePct: changePct,
+    iconUrl: iconUrl,
+    fallbackChar: ticker.charAt(0),
+    sourceBadge: 'YAHOO FINANCE',
+    krwStr: globalUsdKrw ? `≈ ₩${krwPrice >= 100 ? Math.round(krwPrice).toLocaleString() : krwPrice.toFixed(2)}` : '',
+    sparkHtml,
+    extLabel: '',
+    showConverter: false,
+    tf: tf,
+    chart: tile.chart !== false
+  };
+}
+
 async function fetchFx(tile) {
   const multi = (tile.base === 'JPY' || tile.base === 'VND' || tile.base === 'IDR') ? 100 : 1;
 
@@ -788,7 +886,25 @@ async function refreshTile(tile) {
 
   try {
     let data;
-    if (tile.type === 'binance') data = await fetchBinance(tile);
+    if (tile.type === 'binance') {
+      const baseTicker = tile.symbol.replace('USDT', '');
+      const isStock = STOCK_TICKERS.has(baseTicker);
+
+      if (isStock && isNyseRegularHours()) {
+        // 정규장 시간의 실제 주식은 야후 파이낸스로 우선 시도하고,
+        // 프록시가 막히거나 데이터가 이상하면 그 자리에서 바로 바이낸스로 폴백합니다.
+        try {
+          data = await fetchYahooStock(tile);
+        } catch (yErr) {
+          data = await fetchBinance(tile);
+          data.sourceBadge = 'BINANCE FUTURES · FALLBACK';
+        }
+      } else {
+        data = await fetchBinance(tile);
+        // 코인/원자재는 원래도 24시간이라 그대로 두고, 실제 주식만 장 마감 상태임을 표시합니다.
+        if (isStock) data.sourceBadge = 'BINANCE FUTURES · OFF-HOURS';
+      }
+    }
     else if (tile.type === 'fx') data = await fetchFx(tile);
     
     tileCache[tile.id] = data;
