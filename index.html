@@ -168,6 +168,8 @@
 
   /* 차트 호버 툴팁(Tooltip) 전용 CSS */
   .chart-container { position:relative; width:100%; height:100%; cursor:crosshair; }
+  /* 드래그 중엔 다른 타일의 차트 위를 지나가도 호버 이벤트 자체가 발생하지 않도록 막습니다. */
+  .dragging-active .chart-container { pointer-events: none; }
   svg.spark { width: 100%; height: 100%; display: block; opacity: 0.4; z-index: 0; }
   
   .chart-hover-line {
@@ -306,7 +308,13 @@
 
 <script id="main-script">
 MobileDragDrop.polyfill({ holdToDrag: 250 });
-window.addEventListener('touchmove', function() {}, {passive: false});
+
+// mobile-drag-drop 라이브러리가 요구하는 workaround: 크롬은 touchmove 리스너를 기본적으로
+// passive로 취급해서, 이 리스너가 없으면 드래그 중 기본 스크롤을 못 막습니다.
+// 다만 이 리스너를 항상 붙여두면 드래그하지 않는 평소에도 터치 스크롤 성능이 떨어지므로,
+// 실제 드래그가 진행 중일 때만 붙였다가 끝나면 바로 뗍니다.
+function noopTouchMoveBlocker() {}
+let isDragging = false;
 
 function fetchWithTimeout(url, ms = 3000) {
   return Promise.race([
@@ -600,6 +608,10 @@ function sparkSvg(chartData, tileId) {
 }
 
 function handleChartHover(e, container) {
+  // 타일을 드래그하는 중에는 손가락이 다른 타일의 차트 위를 지나가며 이 핸들러가 계속
+  // 호출되는데, 그때마다 getBoundingClientRect 같은 강제 레이아웃 계산이 일어나서
+  // 드래그 자체가 버벅여 보이는 주된 원인이었습니다. 드래그 중엔 아예 건너뜁니다.
+  if (isDragging) return;
   if (e.type === 'touchmove') e.preventDefault(); 
   const evt = e.touches ? e.touches[0] : e;
   const rect = container.getBoundingClientRect();
@@ -923,6 +935,9 @@ async function fetchFx(tile) {
 }
 
 async function refreshTile(tile) {
+  // 드래그 도중 타일 내용이 통째로 다시 그려지면(innerHTML 교체) 레이아웃이 흔들려서
+  // 드래그가 더 버벅여 보입니다. 드래그가 끝난 뒤 다음 주기에 다시 갱신되니 잠깐 건너뜁니다.
+  if (isDragging) return;
   const el = document.getElementById('screen-' + tile.id);
   if (!el) return;
   if (el.querySelector('input:focus')) return;
@@ -963,7 +978,13 @@ async function refreshTile(tile) {
   }
 }
 
-function handleDragStart(e) { dragSrcEl = this; this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index); }
+function handleDragStart(e) {
+  dragSrcEl = this; this.classList.add('dragging');
+  isDragging = true;
+  document.body.classList.add('dragging-active');
+  window.addEventListener('touchmove', noopTouchMoveBlocker, { passive: false });
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.index);
+}
 function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
 function handleDragEnter(e) { e.preventDefault(); if (this !== dragSrcEl) this.classList.add('drag-over'); }
 function handleDragLeave(e) { this.classList.remove('drag-over'); }
@@ -981,7 +1002,13 @@ function handleDrop(e) {
   }
   return false;
 }
-function handleDragEnd(e) { this.classList.remove('dragging'); document.querySelectorAll('.tile').forEach(el => el.classList.remove('drag-over')); }
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.tile').forEach(el => el.classList.remove('drag-over'));
+  isDragging = false;
+  document.body.classList.remove('dragging-active');
+  window.removeEventListener('touchmove', noopTouchMoveBlocker, { passive: false });
+}
 
 function renderGrid() {
   const grid = document.getElementById('grid');
