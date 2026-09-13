@@ -109,6 +109,10 @@
   .tile[draggable="true"] { cursor: grab; }
   .tile[draggable="true"]:active { cursor: grabbing; }
   .tile.dragging { opacity: 0.5; transform: scale(0.95); z-index: 20; }
+  /* .tile 기본 규칙에 transform 0.2s 트랜지션이 걸려있어서, 드래그 중 손가락을 따라
+     위치가 바뀔 때마다 0.2초씩 밀려서 따라오는 것처럼 보였습니다. 드래그 중엔 즉시 반응하도록
+     끕니다. (드래그 이미지가 .tile 클래스를 그대로 복제해서 만들어지기 때문에 필요합니다) */
+  .dragging-active .tile { transition: none !important; }
   .tile.drag-over { border-color: var(--accent); transform: scale(1.02); }
 
   .tile .screen {
